@@ -1,0 +1,136 @@
+1  修改 /etc/hosts
+192.168.1.10	nn01
+192.168.1.20	nn02
+192.168.1.11	node1 (zookeeper)
+192.168.1.12	node2 (zookeeper)
+192.168.1.13	node3 (zookeeper)
+
+2  配置 nn02 ssh 免密码登录，包含本机
+/etc/ssh/ssh_config   修改  StrictHostKeyChecking no
+
+3  停止 hadoop 集群，及其  kafka，并初始化 hdfs 集群
+rm  -rf  /var/hadoop/*
+nn02  创建  mkdir /var/hadoop
+
+4  验证 zookeeper 集群
+5  nn02 禁用 selinux ，卸载 firewalld ,安装 java openjdk
+#----------------------------------------------------------------------#
+目录  /usr/local/hadoop/etc/hadoop
+配置文件 hadoop-env.sh
+JAVA_HOME
+HADOOP_CONF_DIR
+
+配置文件 slaves
+node1
+node2
+node3
+
+xml 文件配置格式
+    <property>
+        <name></name>
+        <value></value>
+    </property>
+
+配置文件 core-stie.xml
+n: fs.defaultFS
+v: hdfs://nsd1802
+n: hadoop.tmp.dir
+v: /var/hadoop
+n: ha.zookeeper.quorum
+v: node1:2181,node2:2181,node3:2181
+
+配置文件 hdfs-site.xml
+n: dfs.nameservices
+v: nsd1802
+n: dfs.ha.namenodes.nsd1802
+v: nn1,nn2
+n: dfs.namenode.rpc-address.nsd1802.nn1
+v: nn01:8020
+n: dfs.namenode.rpc-address.nsd1802.nn2
+v: nn02:8020
+n: dfs.namenode.http-address.nsd1802.nn1
+v: nn01:50070
+n: dfs.namenode.http-address.nsd1802.nn2
+v: nn02:50070
+n: dfs.namenode.shared.edits.dir
+v: qjournal://node1:8485;node2:8485;node3:8485/nsd1802
+n: dfs.journalnode.edits.dir
+v: /var/hadoop/journal
+n: dfs.client.failover.proxy.provider.nsd1802
+v: org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider
+n: dfs.ha.fencing.methods
+v: sshfence
+n: dfs.ha.fencing.ssh.private-key-files
+v: /root/.ssh/id_rsa
+n: dfs.ha.automatic-failover.enabled
+v: true
+n: dfs.replication
+v: 2
+
+配置文件 mapred-site.xml
+n: mapreduce.framework.name
+v: yarn
+
+配置文件 yarn-site.xml
+n: yarn.resourcemanager.ha.enabled
+v: true
+n: yarn.resourcemanager.ha.rm-ids
+v: rm1,rm2
+n: yarn.resourcemanager.recovery.enabled
+v: true
+n: yarn.resourcemanager.store.class
+v: org.apache.hadoop.yarn.server.resourcemanager.recovery.ZKRMStateStore
+n: yarn.resourcemanager.zk-address
+v: node1:2181,node2:2181,node3:2181
+n: yarn.resourcemanager.cluster-id
+v: yarn-ha
+n: yarn.resourcemanager.hostname.rm1
+v: nn01
+n: yarn.resourcemanager.hostname.rm2
+v: nn02
+n: yarn.nodemanager.aux-services
+v: mapreduce_shuffle
+
+配置文件下载地址
+http://118.144.89.240/hadoop_conf.tar.gz
+
+#------------------------------------------------------------------------#
+ALL: 所有机器
+nodeX： node1    node2    node3
+
+ALL:  同步配置到所有集群机器
+NN1: 初始化ZK集群  ./bin/hdfs zkfc -formatZK
+nodeX:  启动 journalnode 服务 
+        ./sbin/hadoop-daemon.sh start journalnode
+
+NN1: 格式化  ./bin/hdfs  namenode  -format
+
+NN2: 数据同步到本地 /var/hadoop/dfs
+
+NN1: 初始化 JNS
+        ./bin/hdfs namenode -initializeSharedEdits
+
+nodeX: 停止 journalnode 服务
+        ./sbin/hadoop-daemon.sh stop journalnode
+
+#----------------------------------------------------------------#
+启动集群
+NN1: ./sbin/start-all.sh
+NN2: ./sbin/yarn-daemon.sh start resourcemanager
+
+查看集群状态
+./bin/hdfs haadmin -getServiceState nn1  
+./bin/hdfs haadmin -getServiceState nn2
+./bin/yarn rmadmin -getServiceState rm1
+./bin/yarn rmadmin -getServiceState rm2
+
+./bin/hdfs dfsadmin -report
+./bin/yarn  node  -list
+
+访问集群：
+./bin/hadoop  fs -ls  /
+./bin/hadoop  fs -mkdir hdfs://nsd1802/input
+
+验证高可用，关闭 active namenode
+./sbin/hadoop-daemon.sh stop namenode
+

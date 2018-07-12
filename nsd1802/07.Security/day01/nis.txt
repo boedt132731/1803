@@ -1,0 +1,32 @@
+
+1. 安装软件
+Server端（192.168.4.201）
+yum install ypserv ypbind 
+
+Client端（192.168.4.202）
+yum install ypbind
+
+2. 启动服务
+Server端
+修改文件：/etc/sysconfig/network
+systemctl start ypserv
+syrtemctl start yppasswdd
+同步数据库
+cd /var/yp
+make
+修改/etc/yp.conf 
+/etc/nsswitch.conf
+systemctl start ypbind
+
+3. 客户端
+修改/etc/sysconfig/network
+/etc/yp.conf
+/etc/nsswitch.conf
+systemctl start ypbind
+
+4. 在客户端验证
+ypcat passwd
+
+ssh -l test clientIP
+
+

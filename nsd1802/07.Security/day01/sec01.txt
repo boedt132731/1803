@@ -1,0 +1,93 @@
+GRE
+
+linux
+
+modprobe ip_gre
+lsmod |grep gre
+rmmod  ip_gre
+
+ip tunnel add tun0 mode gre remote IP local IP
+ip link set tun0 up
+ip address add 
+
+pptp
+/etc/pptpd.conf
+/etc/ppp/option.pptpd
+/etc/ppp/chap-secret
+
+l2tp + ipsec
+/etc/x2ltpd/x2ltpd.conf
+/etc/ppp/option.xl2tpd
+/etc/ppp/chap-secret
+
+libreswan
+
+
+chrony
+server 201.1.2.4 iburst
+allow 192.168.4.0/24
+local stratum 10
+
+server 192.168.4.5 iburst
+
+ssh客户配置文件
+/etc/ssh/ssh_config
+StrictHostKeyChecking no
+
+cat /etc/hosts
+201.1.2.200     vpn
+201.1.2.10      client
+
+创建一个文件
+/root/host.txt
+vpn
+client
+
+     
+pssh -A -o /tmp -h /root/host.txt  date
+
+批量拷贝文件
+pscp.pssh -h host.txt pssh-2.3.1-5.el7.noarch.rpm /tmp/
+
+拷贝目录
+pscp.pssh  -r
+
+pslurp -r -h host.txt -L /media /boot /tmp/
+
+
+安全
+su 
+日志文件：
+tail -f /var/log/secure
+
+sudo
+vim /etc/sudoers
+lisi    ALL=(root) /usr/sbin/useradd,/usr/bin/passwd
+sudo /usr/sbin/useradd u1
+
+lisi    ALL=(root)      NOPASSWD: /usr/sbin/useradd,/usr/bin/passwd,!/usr/bin/passwd root,/usr/sbin/user*
+
+centos rhel 
+ubuntu root被禁用 test
+test ALL=ALL
+sudo -l
+
+ssh配置文件
+Port 12200
+Protocol 2
+ListenAddress 201.1.2.200
+
+
+ftp匿名用户上传
+[root@vpn vsftpd]# setenforce 0
+[root@vpn vsftpd]# getenforce 
+Permissive
+[root@vpn vsftpd]# cd /var/ftp/
+[root@vpn ftp]# mkdir upload
+[root@vpn ftp]# chown ftp.ftp upload/
+
+ftp客户端：
+yum install ftp
+
+
+

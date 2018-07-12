@@ -1,0 +1,171 @@
+rsync同步服务
+
+• 同步与复制的差异
+– 复制:完全拷贝源到目标
+– 同步:增量拷贝,只传输变化过的数据
+ 
+
+
+• 命令用法
+– rsync [选项...]   源目录/      目标目录
+– rsync [选项...]   源目录      目标目录
+
+
+ – -n:测试同步过程,不做实际修改
+ – --delete:删除目标文件夹内多余的文档
+ – -a:归档模式,相当于-rlptgoD
+ – -v:显示详细操作信息
+ – -z:传输过程中启用压缩/解压
+
+
+本地目录的同步
+
+[root@svr7 ~]# mkdir /dir1
+[root@svr7 ~]# mkdir /stu01
+
+# cp /etc/passwd /etc/group /etc/fstab    /dir1/
+
+[root@svr7 ~]# ls /dir1/
+[root@svr7 ~]# rsync -avz /dir1/  /stu01/
+[root@svr7 ~]# ls /stu01/
+
+[root@svr7 ~]# cp /etc/resolv.conf /dir1/
+[root@svr7 ~]# rsync -avz /dir1/  /stu01/
+[root@svr7 ~]# ls /stu01/
+[root@svr7 ~]# echo haha >> /dir1/group 
+[root@svr7 ~]# rsync -avz /dir1/  /stu01/
+
+[root@svr7 ~]# echo xixi > /dir1/resolv.conf 
+[root@svr7 ~]# rsync -avz /dir1/  /stu01/
+[root@svr7 ~]# ls /stu01/
+
+####################################################
+rsync+SSH远程同步
+
+  rsync  /本地路径/源文件/    用户名@对方的IP地址:/目标路径
+
+  rsync   用户名@对方的IP地址:/目标路径       /本地路径/路径/   
+
+虚拟机A:
+# rm -rf /opt/*
+# touch /opt/{1..5}.txt
+# ls /opt/
+# rsync --delete -avz  /opt/  root@192.168.4.207:/opt/
+
+虚拟机B:
+# ls /opt/
+
+
+虚拟机A:
+# touch /opt/6.txt
+# rsync --delete -avz  /opt/  root@192.168.4.207:/opt/
+
+虚拟机B:
+# ls /opt/
+
+#####################################################
+ 实时的远程同步
+
+一、取消用户名密码的验证
+  1.虚拟机A  生成公钥  私钥
+ [root@svr7 ~]# ssh-keygen       #一路回车
+ [root@svr7 ~]# ls  /root/.ssh/  #查看公钥  私钥
+
+  2.虚拟机A  传递公钥 到对方服务器
+ [root@svr7 ~]# ssh-copy-id  root@192.168.4.207
+ 
+  3.虚拟机A 验证
+ [root@svr7 ~]# ssh  root@192.168.4.207
+
+二、源码包编译安装 inotify-tools(监控目录内容变化)
+
+1.真机上传到虚拟机A
+# scp /var/ftp/NSD1803/SERVICES/Day01/tools.tar.gz root@192.168.4.7:/
+
+2.安装gcc make
+3.解包tar
+# tar -xf /tools/inotify-tools-3.13.tar.gz  -C   /
+# cd /inotify-tools-3.13/
+
+4.配置./configure
+[root@svr7 inotify-tools-3.13]# ./configure 
+5.编译与安装
+[root@svr7 inotify-tools-3.13]# make
+[root@svr7 inotify-tools-3.13]# make install
+
+[root@svr7 /]# inotifywait    #具备命令程序
+No files specified to watch!
+
+6.程序的使用
+常用命令选项
+– -m,持续监控(捕获一个事件后不退出)
+– -r,递归监控、包括子目录及文件
+– -q,减少屏幕输出信息
+– -e,指定监视的 modify、move、create、delete、attrib 等事件类别
+
+[root@svr7 /]# inotifywait -mrq /opt/
+
+
+三、书写rsync脚本
+
+      死循环脚本
+
+     while  [条件判断]
+     do
+           循环的语句
+     done
+
+[root@svr7 /]# vim  /root/rsync.sh
+
+#!/bin/bash
+ while  inotifywait -rqq /opt/  
+ do
+  rsync --delete -az  /opt/  root@192.168.4.207:/opt
+ done  &
+    
+[root@svr7 /]# chmod  +x  /root/rsync.sh
+
+
+#######################################################
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,154 @@
+0 »ù±¾Ô­Ôò
+ÎïÀí»ú
+    selinux  ±ØĞë½ûÓÃ
+    firewalld   ±ØĞëÍ£Ö¹
+    systemctl  stop  firewalld
+    systemctl  mask  firewalld
+    NetworkManager  -- ²»¹Ü
+ĞéÄâ»úÄ£°å
+    selinux     ±ØĞë½ûÓÃ
+    firewalld   ±ØĞëĞ¶ÔØ
+    NetworkManager  ±ØĞëĞ¶ÔØ
+ifcfg-eth0  ÅäÖÃÎÄ¼ş
+DEVICE="eth0"
+ONBOOT="yes"
+IPV6INIT="no"
+TYPE="Ethernet"
+BOOTPROTO="dhcp"
+
+
+
+´´½¨ĞéÄâ»ú node1
+1¡¢´´½¨ĞéÄâ»úÅäÖÃÎÄ¼ş
+     ¿½±´Ä£°åµ½ node1.xml £¬ĞŞ¸Ä  name ×Ö¶Î£¬ĞŞ¸Ä ´ÅÅÌÎÄ¼ş
+2¡¢´´½¨ĞéÄâ»ú´ÅÅÌÎÄ¼ş
+cd /var/lib/libvirt/images
+qemu-img create -b node.qcow2 -f qcow2 node1.img
+
+3¡¢Æô¶¯ĞéÄâ»ú²¢²âÊÔ
+cd /etc/libvirt/qemu
+virsh define node1.xml
+virsh start node1
+virsh console node1
+
+4¡¢ Ô¶³ÌÁ¬½Ó
+virsh -c qemu+ssh://root@172.40.53.67/system
+virt-manager 
+openstack  °²×°»·¾³×¼±¸
+ÎïÀí»ú£º
+    °²×°ÅäÖÃ  dns£¬ÄÜ×÷Îª×ª·¢ dns ·şÎñÆ÷¼´¿É
+    °²×°ÅäÖÃ chronyd server 
+    Ìí¼ÓÒ»¸öÍøÇÅ  vbr1
+
+ÅäÖÃÁ½¸öĞéÄâ»ú
+    µÚÒ»¸ö °²×°¹ÜÀí½Úµã×îÉÙ  8G ÄÚ´æ
+               µ¥¶ÀÌí¼ÓÒ»¿éÓ²ÅÌ¸ø openstack cinder Ê¹ÓÃ 20G
+               µ¥¶ÀÌí¼ÓÒ»¿é Íø¿¨ Ê¹ÓÃ vbr1
+    µÚ¶ş¸ö °²×° nova ½Úµã ×îÉÙ 5G ÄÚ´æ
+               µ¥¶ÀÌí¼ÓÒ»¿é Íø¿¨ Ê¹ÓÃ vbr1
+
+yum install cloud-utils-growpart
+growpart  /dev/vda  1
+xfs_growfs  /
+
+1 ÎïÀí»ú°²×°ÅäÖÃ dns
+yum install -y bind-chroot
+ĞŞ¸Ä /etc/named.conf
+listen-on port 53 { 192.168.1.254; };
+//listen-on-v6 port 53 { ::1; };
+allow-query     { any; };
+forwarders { 202.106.196.115; };
+dnssec-enable no;
+dnssec-validation no;
+2 °²×°ÅäÖÃÊ±¼ä·şÎñÆ÷
+yum install -y chrony
+ĞŞ¸Ä /etc/chrony.conf
+server ntp1.aliyun.com iburst
+bindacqaddress 0.0.0.0
+allow 0/0
+
+chronyc  sources  -v
+
+ĞéÄâ»ú1
+×îÉÙ  8G ÄÚ´æ
+<memory unit='GB'>9</memory>
+<currentMemory unit='GB'>9</currentMemory>
+Ìí¼ÓÓ²ÅÌ
+qemu-img create -f qcow2 /var/lib/libvirt/images/disk.img 20G
+<disk type='file' device='disk'>
+    <driver name='qemu' type='qcow2'/>
+    <source file='/var/lib/libvirt/images/disk.img'/>
+    <target dev='vdb' bus='virtio'/>
+</disk>
+Ìí¼ÓÍø¿¨
+<interface type='network'>
+    <source network='vbr1'/>
+    <model type='virtio'/>
+</interface>
+gpgcheck=1
+
+yum clean all
+
+ÏÂÔØ  RPM-GPG-KEY-CentOS-7
+
+rpm --import RPM-GPG-KEY-CentOS-7
+
+yum install lftp lrzsz
+
+¹ÒÔØ
+RHEL7OSP-10.iso
+RHEL7-extras.iso
+
+[ooxx]
+name="ooxx"
+bashurl=ftp://192.168.1.254/openstack/rhel-7-server-rhceph-2-mon-rpms
+enabled=1
+gpgcheck=0
+
+ĞŞ¸Ä  /etc/hosts  ÈÃ »úÆ÷¿ÉÒÔÏà»¥ ping Í¨
+
+³õÊ¼»¯ openstack µÄ¾í´æ´¢£¬¾í×éÃû³Æ±ØĞë½Ğ cinder-volumes
+yum install -y lvm2
+pvcreate /dev/vdb
+vgcreate cinder-volumes /dev/vdb
+vgs
+
+°²×° openstack ÒÀÀµµÄÈí¼ş°ü
+qemu-kvm 
+libvirt-client 
+libvirt-daemon 
+libvirt-daemon-driver-qemu 
+python-setuptools 
+
+°²×° openstack ¹¤¾ß°ü  openstack-packstack
+
+´´½¨Ó¦´ğÎÄ¼ş
+packstack --gen-answer-file answer.ini
+11   CONFIG_DEFAULT_PASSWORD=Taren1
+42   CONFIG_SWIFT_INSTALL=n
+75   CONFIG_NTP_SERVERS=192.168.1.254
+98   CONFIG_COMPUTE_HOSTS=192.168.1.10,192.168.1.11
+102 CONFIG_NETWORK_HOSTS=192.168.1.10,192.168.1.11
+554 CONFIG_CINDER_VOLUMES_CREATE=n
+840 CONFIG_NEUTRON_ML2_TYPE_DRIVERS=flat,vxlan
+876 CONFIG_NEUTRON_ML2_VXLAN_GROUP=239.1.1.5
+910 CONFIG_NEUTRON_OVS_BRIDGE_MAPPINGS=physnet1:br-ex
+921 CONFIG_NEUTRON_OVS_BRIDGE_IFACES=br-ex:eth0
+936 CONFIG_NEUTRON_OVS_TUNNEL_IF=eth1
+1179 CONFIG_PROVISION_DEMO=n
+
+°²×° openstack 
+packstack  --answer-file=answer.ini
+
+1¿¿¿¿¿¿¿¿¿¿¿¿/etc/hosts,¿¿¿¿¿ping¿
+2¿¿¿¿kvm-rhel-env¿¿¿¿¿
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,20 @@
+ip命令
+查看ip
+ip address ls
+ip address ls dev eth0
+给tun0设备配置ip:
+ip address add dev tun0 10.10.10.10/24 peer 10.10.10.5/24
+
+删除eth0网络连接
+nmcli connection delete eth0
+
+ip tunnel help
+
+ssh 192.168.4.100 ----> /etc/ssh/ssh_config
+GSSAPIAuthentication no   解决登陆慢
+StrictHostKeyChecking no  解决询问是否继续登陆
+
+systemctl start sshd   ----> /etc/ssh/sshd_config
+
+
+

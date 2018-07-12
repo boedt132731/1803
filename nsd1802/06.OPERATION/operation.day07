@@ -1,0 +1,435 @@
+ 
+VPN(虚拟专用网络)三种连接方式：
+GRE  VPN （linux与linux之间的，windows不支持）
+PPTP  VPN （服务器linux之搭，客户端是windows，数据不加密）
+L@TP+IPSec VPN （linux，windows都支持，用户认证和数据都加密）
+
+linux模块设计  ：  安装，硬盘
+
+GRE模块
+1.linux内核模块  ip_gre
+2.加载模块
+   lsmod  |  grep  ip_gre   显示模块列表
+   modprobe  ip_gre   加载模块
+   modinfo  ip_gre   查看模块信息
+3.缺点：缺少加密机制
+
+案例1：配置GRE VPN（linux与linux之间）
+
+1.加载模块
+2.创建隧道
+3.创建隧道ip
+
+配置ip地址，确认yum源可用
+Client 关闭eth0，eth3的ip地址是201.1.2.10/24
+Proxy  eth0的ip是192.168.4.5 ，eth3的ip是201.1.2.5/24
+
+关闭eth0网卡
+# nmcli  connection down eth0
+添加网卡eth3
+# nmcli  connection  add  con-name  eth3  ifname  eth3  type  ethernet
+
+本案例要求搭建一个GRE VPN环境，并测试该VPN网络是否能够正常通讯，要求如下：
+启用内核模块ip_gre
+创建一个虚拟VPN隧道(10.10.10.0/24)
+实现两台主机点到点的隧道通讯
+
+步骤一：启用GRE模块
+
+
+1）查看计算机当前加载的模块
+
+[root@Proxy ~]# lsmod  显示模块列表
+[root@Proxy ~]# modprobe  ip_gre  加载模块
+                                 （模块名）
+[root@Proxy ~]# lsmod  |  grep  -i  gre
+[root@Proxy ~]# modinfo  ip_gre   查看模块信息
+filename:       /lib/modules/3.10.0-693.el7.x86_64/kernel/net/ipv4/ip_gre.ko.xz     模块所在位置
+
+Client重复操作
+哪两台作为虚拟机，哪两台加载模块
+
+步骤二：Client主机创建VPN隧道
+
+1）创建隧道add  
+[root@client ~]# ~]# ip tunnel add tun0  mode gre  remote 201.1.2.5 local 201.1.2.10             创建隧道   (隧道名，随意起）             （ 对方ip）
+（本地ip）
+ip tunnel add创建隧道（隧道名称为tun0），ip tunnel help可以查看帮助
+mode设置隧道使用gre模式
+local后面跟本机的IP地址，remote后面是与其他主机建立隧道的对方IP地址
+
+2）启用该隧道（类似与设置网卡up）
+[root@Client ~]# ip  link  show  查看UP
+[root@client ~]# ip link set tun0 up   启用UP
+
+2）为VPN配置隧道IP地址
+[root@Client ~]# ip  addr  add  10.10.10.10/24  peer  10.10.10.5/24  dev tun0
+                                         隧道tun0本地ip             对面主机ip
+[root@Client ~]# ip  a  s  查看配置后的效果
+
+步骤三：Proxy主机创建VPN隧道
+
+ip全都反过来打
+[root@Proxy ~]# ip  tunnel  add tun0  mode  gre remote  201.1.2.10  local  201.1.2.5
+[root@Proxy ~]# ip  link set  tun0  up
+[root@Proxy ~]# ip  addr  add 10.10.10.5/24  peer  10.10.10.10/24  dev  tun0
+
+add  创建隧道ip
+del  删除隧道ip
+
+案例2：创建PPTP VPN（linux与windows之间）
+使用PPTP协议创建一个支持身份验证的隧道连接
+使用MPPE对数据进行加密
+为客户端分配192.168.3.0/24的地址池
+客户端连接的用户名为jacob，密码为123456
+
+Windows主机：网卡桥接 public2（NIC:02:01:00），ip是201.1.2.20/24
+Proxy：eth0的ip是192.168.4.5/24
+       eth3的ip是201.1.2.5/24
+
+windows配置ip步骤：右击网络--->属性--->本地连接--->属性--->ipv4--->配置ip--->确定
+查看ip：开始--->运行--->ipconfig
+关闭防火墙：控制面板--->windows防火墙
+
+linux与windows互ping
+
+步骤一：部署VPN服务器
+
+1）安装软件包（软件包参考lnmp_soft）
+
+[root@Proxy vpn]# cd  /lnmp_soft/vpn
+[root@Proxy vpn]# yum  localinstall  pptpd-1.4.0-2.el7.x86_64.rpm
+[root@Proxy vpn]# rpm  -qc  pptpd   查看有哪些配置文件  c=config
+/etc/ppp/options.pptpd
+/etc/pptpd.conf
+/etc/sysconfig/pptpd
+
+2)修改配置文件
+
+[root@proxy ~]# vim /etc/pptpd.conf
+localip  201.1.2.5   本地ip
+remoteip  192.168.3.1-50  分配客户端的ip范围（不连续用逗号隔开，连续用“-”）
+             客户端连接VPN时，自动分配ip给客户端
+
+[root@proxy ~]# vim /etc/ppp/options.pptpd
+40行 require-mppe-128  不是谁都能连我的VPN，想连就要输入用户名和密码（不需修改）
+67行 ms-dns 8.8.8.8
+
+[root@proxy ~]# vim /etc/ppp/chap-secrets  修改账户配置文件
+jacob    *      123456      *    (客户端连接服务器，谁都可以连)
+用户名  服务器名字   密码       客户端
+服务器标记指定连接的话，名字要与/etc/ppp/options.pptpd里的name pptpd一样
+                  
+[root@proxy ~]# echo "1" > /proc/sys/net/ipv4/ip_forward  数据转发，默认是0
+
+3）启动服务
+
+[root@proxy ~]# systemctl start pptpd
+
+4）翻墙设置（非必需操作）
+[root@proxy ~]# iptables -t nat -A POSTROUTING -s 192.168.3.0/24  -j SNAT --to-source 201.1.2.5
+
+步骤二：客户端设置（windows）
+
+右击网络--->设置新的连接网络--->连接到工作区--->使用我的Internet连接---->稍后设置---->201.1.2.5，名字随意--->jacob，123456--->右击网络-->属性--->更改适配器设置---->连接VPN
+
+在windows上ping201.1.2.5  192.168.4.5都可以通
+
+
+ 案例3：创建L2TP+IPSec VPN
+
+使用L2TP协议创建一个支持身份验证与加密的隧道连接
+使用IPSec对数据进行加密
+为客户端分配192.168.3.0/24的地址池
+客户端连接的用户名为：jacob，密码为：123456
+预共享密钥为：randpass
+
+Windows主机：网卡桥接【 public2（NIC:02:01:00）】，ip是201.1.2.20/24
+VPN(Web2):eth0的ip是192.168.4.200/24
+         eth3的ip是201.1.2.200/24
+
+步骤一：部署IPSec服务
+
+1）安装软件包
+[root@Web2 ~]# yum  -y  install libreswan
+
+2)新建IPSec密钥验证配置文件
+
+[root@Web2 ~]# cat  /etc/ipsec.conf 仅查看一下该主配置文件
+virtual_private=%v4:10.0.0.0/8,%v4:192.168.0.0/16,%v4:172.16.0.0/12,%v4:25.0.0.0/8,%v4:100.64.0.0/10,%v6:fd00::/8,%v6:fe80::/10
+      允许隧道里用什么网，v4：ipv4的网段
+include /etc/ipsec.d/*.conf  加载该目录下的所有配置文件
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+[root@Web2 ~]# cd  lnmp_soft/vpn/
+[root@Web2 vpn]# cp  myipsec.conf  /etc/ipsec.d/
+[root@Web2 vpn]# vim  /etc/ipsec.d/myipsec.conf 
+只需修改ip
+left=201.1.2.200  服务器本机ip
+right=%any    允许任何客户端连接
+
+3)创建IPSec预定义共享密钥
+
+[root@Web2 vpn]# cat  /etc/ipsec.secrets 
+include /etc/ipsec.d/*.secrets  仅查看，不要修改该文件,密码放的位置
+
+[root@Web2 vpn]# vim  /etc/ipsec.d/myipsec.secrets  新建
+201.1.2.200  %any:     PSK   "123456"
+本地ip     任何人都能连   密钥     密码（预共享密码）
+
+4)启动IPSec服务
+
+[root@Web2 vpn]# systemctl start  ipsec
+[root@Web2 vpn]# netstat -nutlp  |  grep  pluto  查看是否启动成功
+
+
+步骤二：部署XL2TP服务（专线VPN隧道）
+
+1）安装软件包
+
+[root@Web2 vpn]# cd  /root/lnmp_soft/vpn/
+[root@Web2 vpn]# yum  localinstall  xl2tpd-1.3.8-2.el7.x86_64.rpm
+
+2) 修改xl2tp配置文件（修改3个配置文件的内容）
+
+[root@Web2 vpn]# vim  /etc/xl2tpd/xl2tpd.conf 
+
+ 31 [lns default]
+ 32 ip range = 192.168.3.128-192.168.3.254    隧道ip
+ 33 local ip = 201.1.2.200  本地ip
+
+[root@Web2 vpn]# vim  /etc/ppp/options.xl2tpd
+注释掉10,16行
+在auth下面添加
+require-mschap-v2   强制要求认证
+
+[root@Web2 vpn]# vim  /etc/ppp/chap-secrets   修改密码文件
+jacob   *       123456  *  
+
+3）启动服务
+[root@Web2 vpn]# systemctl start  xl2tpd
+[root@Web2 vpn]# netstat -nltup  | grep  xl2tpd
+
+步骤二：客户端设置
+设置Windows注册表（不修改注册表，连接VPN默认会报789错误）
+
+单击"开始"，单击"运行"，键入"regedit"，然后单击"确定"
+找到下面的注册表子项，然后单击它：
+HKEY_LOCAL_MACHINE\ System\CurrentControlSet\Services\RasMan\Parameters
+在"编辑"菜单上，单击"新建"->"DWORD值"
+在"名称"框中，键入"ProhibitIpSec"
+在"数值数据"框中，键入"1"，然后单击"确定"
+退出注册表编辑器，然后重新启动计算机
+然后再创建一个新的VPN
+
+
+案例4：NTP时间同步
+
+部署一台NTP时间服务器
+设置时间服务器上层与0.centos.pool.ntp.org同步
+设置本地服务器层级数量为10
+允许192.168.4.0/24网络的主机同步时间
+客户端验证时间是否同步
+
+Client：eth0的ip是192.168.4.100/24
+Proxy： eth0的ip是192.168.4.5/24
+
+                        |------->pc :eth0 192.168.4.100/24
+NTP-------->交换机---------->|------------->pc : eth0 192.168.4.0/24
+                        |------->pc : eth0 192.168.4.0/24
+
+
+步骤一：部署NTP服务,4.5上操作
+
+1）安装软件包
+root@proxy ~]# yum -y install chrony
+[root@proxy ~]# rpm -qc chrony  查看配置文件列表
+/etc/chrony.conf
+/etc/chrony.keys
+/etc/logrotate.d/chrony
+/etc/sysconfig/chronyd
+
+2)修改配置文件
+[root@proxy ~]# vim /etc/chrony.conf
+ 26 allow 192.168.4.0/24
+ 29 local stratum 10    告诉你是第几层，只要不超过15.都是允许的范围
+
+
+4)启动NTP服务
+[root@proxy ~]# systemctl  restart  chronyd
+[root@proxy ~]# systemctl  enable  chronyd
+
+
+步骤二：配置客户端Client 4.100
+
+1）安装软件包
+[root@client ~]# yum –y install chrony
+
+2) 修改配置文件
+[root@client ~]# vim /etc/chrony.conf
+server 192.168.4.5 iburst   设置与哪台服务器同步数据
+                          iburst参数设置重启服务后尽快同步时间
+
+3) 将客户端时间修改为错误的时间
+[root@Client ~]# date  -s  07:00:00
+2018年 04月 13日 星期五 07:00:00 CST
+[root@Client ~]# date 
+
+4) 重启chrony与服务器同步时间
+[root@client ~]# systemctl  restart  chronyd
+
+5) 确认时间是否已经同步
+[root@client ~]# date  多执行几次查看结果
+
+
+案例5：pssh远程套件工具
+
+使用密码批量、多并发远程其他主机
+使用密钥批量、多并发远程其他主机
+批量、多并发拷贝数据到其他主机
+批量、多并发从其他主机下载数据到本机
+批量、多并发杀死其他主机的进程
+
+Client: eth0  192.168.4.100
+Proxy:  eth0  192.168.4.5/24
+        eth1  192.168.2.5/24
+Web1:   eth1  192.168.2.100/24
+Web2:   eth1  192.168.2.200/24
+
+proxy安装pssh，批量管理其他三台电脑
+
+
+步骤一：准备工作
+
+1）安装软件包
+
+[root@Proxy lnmp_soft]# cd  lnmp_soft/
+[root@Proxy lnmp_soft]# rpm  -ivh  pssh-2.3.1-5.el7.noarch.rpm
+
+2)修改/etc/hosts本地解析文件
+
+[root@Proxy lnmp_soft]# vim  /etc/hosts
+192.168.2.100  host1
+192.168.2.200  host2
+192.168.4.100  host3
+
+测试ping通性（通了才能远程）
+[root@Proxy lnmp_soft]# ping  host1  
+[root@Proxy lnmp_soft]# ping  host2
+[root@Proxy lnmp_soft]# ping  host3
+
+3)创建主机列表文件
+[root@Proxy lnmp_soft]# vim  /root/host.txt 
+root@host1
+root@host2       每行一个用户名、IP或域名
+root@host3
+
+步骤二：使用密码批量、多并发远程其他主机
+
+1）语法格式
+[root@proxy ~]# man pssh  通过man帮助查看工具选项的作用
+pssh提供并发远程连接功能
+-A                使用密码远程其他主机（默认使用密钥）
+-i                将输出显示在屏幕
+-H                设置需要连接的主机
+-h                设置主机列表文件
+-p                设置并发数量(同时连多少个)
+-t                设置超时时间
+-o dir            设置标准输出信息保存的目录
+-e dir            设置错误输出信息保存的目录
+-x                传递参数给ssh
+
+
+2)使用密码远程多台主机执行命令，屏幕显示标准和错误输出信息
+
+[root@Proxy lnmp_soft]# pssh  -i  -A  -H  'host1  host2  host3'  -x  '-o  StrictHostKeyChecking=no'  echo  hello
+回车输入密码123456
+
+3)使用密码远程多台主机执行命令，不显示标准和错误输出信息，通过读取host.txt读取主机信息
+
+[root@Proxy lnmp_soft]# pssh  -i  -A  -h  /root/host.txt    echo  hello                                       (绝对路径)
+第二次连不用输 -o  StrictHostKeyChecking=no
+
+步骤三：使用密钥批量、多并发远程其他主机
+
+1）生成密钥并发送密钥到其他主机
+
+[root@proxy ~]# ssh-keygen -N  ''   -f /root/.ssh/id_rsa   非交互生成密钥文件,单引密码为空
+[root@proxy ~]# ssh-copy-id -i /root/.ssh/id_rsa.pub host1
+[root@proxy ~]# ssh-copy-id -i /root/.ssh/id_rsa.pub host2
+[root@proxy ~]# ssh-copy-id -i /root/.ssh/id_rsa.pub host3
+
+2)使用密钥远程其他主机
+
+[root@Proxy lnmp_soft]# pssh  -h  /root/host.txt   echo hello
+
+3)使用密钥远程其他主机，将标准输出信息写入到/tmp目录
+
+[root@Proxy tmp]# pssh  -h  /root/host.txt -o  /tmp/  echo hello
+切换到/tmp下面查看一下                                  tmp是改的名字
+
+步骤四：批量、多并发拷贝数据到其他主机
+
+pscp.pssh :将本地内容拷贝到其他主机
+pslurp ：  将其他主机内容拷贝到本地
+
+1）语法格式
+
+[root@proxy ~]# man pscp.pssh     通过man帮助查看工具选项的作用
+pscp.pssh提供并发拷贝文件功能
+-r    递归拷贝目录
+其他选项基本与pssh一致
+
+2)将本地的wml拷贝到远程主机的根目录下
+[root@proxy ~]# pscp.pssh -h host.txt  wml   / 
+其他三台机子都查看/下的内容
+
+3)递归将本地的/etc目录拷贝到远程主机的/tmp目录下
+[root@proxy ~]#  pscp.pssh -r -h host.txt    /etc   /tmp 
+
+
+步骤五：批量、多并发从其他主机下载数据到本机
+
+1）语法格式
+[root@proxy ~]# man pslurp    通过man帮助查看工具选项的作用
+pslurp提供远程下载功能
+选项与pscp.pssh基本一致
+
+2)将远程主机的/etc/目录，拷贝到当前目录下，存放在对应IP下的tmp目录
+[root@proxy ~]# pslurp -r -h host.txt  /etc /tmp
+把远程主机/etc目录拷贝到当前主机的/root目录下以host.txt文件中的主机名分别命名新目录并在此目录下生成tmp目录存放/etc的内容
+
+3)将远程主机的/etc/目录，拷贝到media下，存放在对应IP下的tmp目录
+[root@proxy ~]# pslurp -r -h host.txt   -L  /media   /etc   /tmp
+                            
+
+步骤六：批量、多并发杀死其他主机的进程
+
+在其他三台机子写一个死循环脚本
+#!/bin/bash
+while :
+do
+echo  haha
+done
+
+将远程主机上的test.sh脚本杀死
+[root@proxy ~]# pnuke  -h  host.txt   tes t
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

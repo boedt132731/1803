@@ -1,0 +1,329 @@
+﻿
+
+考试环境真机：RHEL7.2
+考试环境虚拟机：RHEL 7.0（没桌面）
+	system1、system2
+
+交卷之前：
+    1. 先关机 system2，然后再关机 system1
+    2. 先开机 system1，然后再开机 system2
+    3. 检查答题结果
+
+
+练习环境：
+   依次重置classroom、server、desktop
+
+
+
+
+RHCE 核心考点列表
+####################################################
+
+一、安全策略配置 ——
+1. 配置SELinux
+# vim /etc/selinux/config
+SELINUX=enforcing
+
+SELinux相关配置 ——
+1）Samba共享
+# setsebool -P samba_export_all_rw=on 	【getsebool  -a】
+2）Web服务开放非标准端口
+# semanage  port  -a  -t  http_port_t  -p  tcp  8909
+  							【less /var/log/messages】
+*******************
+If you want to allow /usr/sbin/httpd to bind to network port 8909
+Then you need to modify the port type.
+Do
+# semanage port -a -t PORT_TYPE -p tcp 8909
+    where PORT_TYPE is one of the following: http_cache_port_t, http_port_t, jboss_management_port_t, jboss_messaging_port_t, ntop_port_t, puppet_port_t.
+
+*****  Plugin catchall_boolean (7.83 confidence) suggests   ******************
+
+3）Web服务开放非标准网页目录
+# chcon -R --reference=/var/www  自定义网页目录
+
+
+关于setsebool、semanage操作失败的情况：
+现象：提示killed、结果没成功、卡死
+原因：内存和交换空间不足
+解决办法：虚拟机关机、重新开机、重新设置
+
+
+
+2. 配置SSH访问（+防火墙）
+# vim  /etc/ssh/sshd_config
+.. ..
+DenyUsers  user1@host1  user2@host2
+
+
+
+3. 自定义用户环境（别名设置）
+
+
+
+4.  配置防火墙端口转发
+
+在system1上：
+1）把默认区域设置成 trusted
+2）拒绝考试说明中指定的区域/网段
+3）端口转发
+
+在system2上：
+1）把默认区域设置成 trusted
+2）拒绝考试说明中指定的区域/网段
+
+配置工具 ——
+firewall-config 图形
+firewall-cmd 命令行
+
+
+
+二、网络连接配置 ——
+6. 配置IPv6地址
+配置方法：
+nmcli  con  show
+nmcli  con  mod  "连接名"  ipv6.method  manual  ipv6.addresses  "IPv6地址/掩码长度"
+nmcli  con  up  "连接名"
+
+测试工具：ping6
+
+注意：为两个虚拟机设置固定主机名
+
+
+
+5. 配置链路聚合
+类型：轮询（roundrobin）、热备份（activebackup）
+获取操作命令帮助：man  nmcli-examples ==>  /Team1
+       Example 7. Adding a team master and two slave
+       connection profiles
+           $ nmcli con add type team con-name Team1 ifname Team1 config '{聚合配置}'
+           $ nmcli con add type team-slave con-name Team1-slave1 ifname em1 master Team1
+           $ nmcli con add type team-slave con-name Team1-slave2 ifname em2 master Team1
+
+获取聚合配置帮助：man  teamd.conf  ==>  /"runner
+"runner": {"name": "activebackup"}
+"runner": {"name": "roundrobin"}
+
+
+三、配置邮件服务器 ——
+7. 配置本地邮件服务
+
+考试环境：
+    需要配置空客户端服务器（system1、system2）
+    后端邮件服务器（考官提供）
+
+练习/模拟环境：
+    需要配置空客户端服务器（server0）
+    后端邮件服务器（desktop0 ==》固定主机名、lab  smtp-nullclient  setup）
+
+模拟环境：
+添加配置 local_transport = error:AAAAA
+
+排错：
+# lab  smtp-nullclient grade  	【模拟环境】
+# less  /var/log/maillog 		【模拟/考试环境】
+
+
+
+四、配置文件服务器/客户端 —— 
+8. 通过Samba发布共享目录
+软件包：samba
+系统服务：smb
+
+9. 配置多用户Samba挂载
+软件包：samba-client  cifs-utils
+测试方法：
+smbclient  -L  服务器地址 					【不需要密码】
+smbclient  -U  用户名   //服务器地址/共享名  	【需要密码】
+
+smb:> 操作  —— ls、mkdir 目录、quit
+
+# vim  /etc/fstab
+//服务器地址/共享名  挂载点  cifs  username=用户名,password=密码,multiuser,sec=ntlmssp,_netdev  0 0
+
+# mount  -a
+
+客户机测试：
+# su  -  普通用户
+$ cifscreds  add  -u  共享用户名   服务器地址
+password：对应共享用户名的密码
+
+必要的更新提交的密码：
+$ cifscreds  update  -u  共享用户名   服务器地址
+password：对应共享用户名的新密码
+
+
+10. 配置NFS共享服务
+支持kerberl加密NFS的前提条件 —— 
+主机加入到kerberos区域（考试时现成的、练习 lab  nfskrb5  setup）
+
+需要额外作的：部署kerberos密钥
+# wget  提供的服务机的密钥文件下载地址    -O  /etc/krb5.keytab
+
+排错方法：
+# klist  -k  /etc/krb5.keytab
+
+系统服务：
+nfs-server.service   nfs-secure-server.service
+
+加密共享配置：
+# vim  /etc/exports
+目录的绝对路径		客户机的地址(rw,sec=krb5p)
+
+NFS协议版本：v1～v4
+
+
+11. 挂载NFS共享
+支持kerberl加密NFS的前提条件 —— 
+主机加入到kerberos区域（考试时现成的、练习 lab  nfskrb5  setup）
+
+需要额外作的：部署kerberos密钥
+# wget  提供的客户机的密钥文件下载地址    -O  /etc/krb5.keytab
+
+系统服务：
+nfs-secure.service
+
+# vim  /etc/fstab
+服务器地址:目录路径  挂载点  nfs  sec=krb5p,_netdev  0 0
+
+
+本地磁盘 ——
+    计算机主板 ==》IDE数据线 ==》硬盘、光盘
+    计算机主板 ==》SATA数据线 ==》硬盘
+    计算机主板 ==》SCSI数据线 ==》硬盘
+
+网络磁盘（Internet SCSI） ——
+    存储服务器 ==》以太网络 ==》客户机
+
+19. 配置iSCSI服务端
+目标：存储服务器如何提供网络磁盘
+几个概念：
+   target：存储服务器发布给客户机访问的目标（虚拟磁盘柜）
+   lun：对应到客户机可以使用的一块逻辑存储单元（虚拟磁盘）
+   backstore：对应存储服务器上的实际的存储设备（物理磁盘/分区）
+
+提供一个iSCSI网络存储的基本思路 ——
+1）准备一个空闲的物理存储设备
+2）为这个存储设备起一个后端存储的名字
+3）创建一个虚拟磁盘柜（target）	【IQN名称规范】
+4）配置磁盘柜
+	a）把指定的后端存储分配给一个逻辑单元（luns）
+	b）指定允许哪一台客户机使用（acls） 【客户机标记符合IQN规范】
+	c）指定通过本机的哪个IP地址和端口可以访问此磁盘柜（portals）
+
+
+# yum  -y  install  targetcli
+# targetcli
+.. ..
+# systemctl  restart  target
+
+
+20. 配置iSCSI客户端
+目标：如何连接及使用由存储服务器提供的网络磁盘
+
+访问一个iSCSI网络存储的基本思路 ——
+1）发现目标服务器提供的iSCSI网络存储的名称
+2）连接iSCSI网络存储
+
+
+# yum  -y  install iscsi-initiator-utils
+# vim /etc/iscsi/initiatorname.iscsi
+.. ..
+# systemctl  restart  iscsid 		【只需要启动一次】
+
+# iscsiadm  -m  discovery  -t  sendtargets   -p  server0
+# iscsiadm  -m  node  -L  all
+
+# lsblk
+
+设置开机自动连接已经发现的iSCSI设备：
+# vim  /var/lib/iscsi/nodes/<TAB><TAB><TAB>
+.. .. 查找 startup，把第二个参数的值改成 automatic
+# systemctl  enable  iscsi 			【不是iscsid】
+
+
+
+关于iSCSI客户机reboot死机的问题：
+# vim  /etc/bashrc
+.. ..
+alias  reboot='sync ; reboot -f'
+
+# bash  /etc/bashrc
+# reboot
+
+关于客户机重起以后需要手动mount -a才能挂载资源的问题：
+# vim  /etc/rc.local
+.. ..
+for  i  in  {1..20}
+do
+	mount  -a
+	sleep  5
+done
+
+
+五、配置网站服务器 ——
+12.实现一个web服务器
+# wget  测试网页地址  -O  /网页目录/index.html
+
+13.配置安全web服务
+14.配置虚拟主机
+15.配置web内容的访问
+16.实现动态WEB内容
+
+每一个虚拟主机单独一份配置文件（默认站点00-custom.conf）
+排错方法：httpd  -t
+软件包：httpd  mod_ssl  mod_wsgi
+
+
+获取配置帮助：
+# yum  -y  install  httpd-manual
+# systemctl restart  httpd
+# firefox  http://服务器地址/manual
+
+# less /etc/httpd/conf.d/ssl.conf
+# less /usr/share/doc/mod_wsgi-3.4/README
+							【rpm  -ql  mod_wsgi】
+
+六、Shell脚本编程 —— 
+17. 创建一个脚本
+18. 创建一个添加用户的脚本
+
+
+七、配置及管理数据库 ——
+21. 配置一个数据库
+22. 数据库查询（填空）
+
+
+模拟考试：
+[root@room9pc13 ~]# rht-vmctl  reset  classroom
+[root@room9pc13 ~]# rht-vmctl  reset  server
+[root@room9pc13 ~]# rht-vmctl  reset  desktop
+
+[root@room9pc13 ~]# firefox  http://localhost/exam  
+
+辅助评测脚本：
+[root@room9pc13 ~]# rht-labcheck
+
+server0 ....
+
+desktop0 ....
+
+100%
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+####################################################

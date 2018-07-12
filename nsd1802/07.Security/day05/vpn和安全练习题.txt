@@ -1,0 +1,51 @@
+﻿环境：
+新建4台虚拟机
+主机1：proxy
+eth0:192.168.4.100/24
+eth3:201.1.2.100/24
+
+主机2：client1
+eth0:192.168.4.101/24
+
+主机3：client2
+eth0:192.168.4.102/24
+
+主机4：client3
+eth2:201.1.2.103/23
+
+实验一：
+
+1. 在proxy主机上通过/etc/hosts文件解析这4台主机名
+
+2. proxy、client1、client2这三台主机之间在互相ssh登录时不需要密码
+提示：使用ssh key验证
+
+3. 在proxy主机上配置ntp server，为内网的client1和client2提供时间校验服务
+
+4. 在proxy主机上使用批量命令pssh查看proxy、client1、client2三个主机的时间是否同步了
+
+5. 在proxy和client3两台主机之间架设vpn隧道，使用gre方式
+
+实验二：
+在proxy节点上
+1. 修改lisi的账号过期时间为2018-7-1，zhangsan这个用户登录时提示修改密码
+
+2. 授权sudo组可以使用systemctl命令管理服务，可以使用/bin目录下的所有命令，除了/bin/kill命令
+   sudo组里包括lisi和zhangsan两个用户
+
+3. 这个节点只允许root、lisi和zhangsan三个用户登录，限制zhangsan只能从client3节点上登录
+
+实验三：
+1. client3节点要求proxy节点把/var/log目录打个压缩包传过来，要求传输的时候把这个压缩包进行加密，加密方式为非对称加密。
+提示：使用gpg
+
+2. 在proxy节点搭建入侵检测系统，检测的文件为/root、/etc，只要求对文件的完整性做检测，并做入侵后的检查
+
+3. 在proxy节点上抓取连接本机21端口的数据包，并获得登录的用户名和密码
+
+
+
+
+
+
+

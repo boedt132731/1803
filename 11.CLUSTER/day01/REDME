@@ -1,0 +1,3 @@
+yum -y install git
+git clone https://github.com/MrZhangzhg/nsd2018.git
+git pull

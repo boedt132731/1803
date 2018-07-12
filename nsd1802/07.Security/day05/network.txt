@@ -1,0 +1,14 @@
+修改网卡eth3:
+cd /etc/sysconfig/network-scripts
+vim ifcfg-eth3
+BOOTPROTO=none
+NAME=eth3
+DEVICE=eth3
+IPADDR=201.1.2.5
+NETMASK=255.255.255.0
+
+保存退出
+nmcli connection reload eth3
+nmcli connection up eth3
+
+

@@ -1,0 +1,51 @@
+1.指定本机永久DNS服务器地址，配置文件？
+ /etc/resolv.conf
+
+2.开机挂载配置文件六个字段分别为什么？
+  设备路径    挂载点    文件系统类型   defaults  0  0
+
+3.搭建smb服务，需要安装什么软件？
+  samba
+
+4.配置nfs共享，配置文件在哪里？
+   /etc/exports
+
+5.yum客户端配置文件放在什么路径下？
+   /etc/yum.repos.d/*.repo
+
+
+6.配置Apache的httpd服务时，虚拟Web主机区分方式都有哪些？
+     基于域名的虚拟Web
+     基于端口的虚拟Web
+     基于IP的虚拟Web
+
+7.配置DNS的named服务,需要安装什么软件？
+    bind  bind-chroot
+
+8.搭建PXE网络装机服务，需要配置的服务都有哪些？
+      dhcp   tftp   http
+
+9.请写出您熟知的Linux命令，至少10条以上（请开始您的表演）
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

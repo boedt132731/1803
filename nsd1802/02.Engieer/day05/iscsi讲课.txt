@@ -1,0 +1,135 @@
+iscsi----->网络磁盘共享
+软件包（S）：targetcli            作用：发布网络磁盘
+软件包（C）：iscsi-ini<tab>       作用：连接网络磁盘
+
+后端存储backstore：
+        服务端实际提供存储的设备（磁盘，分区，设备文件）
+
+iscsi网络磁盘：
+     逻辑上定义的一个网络磁盘
+lun逻辑连接：
+     软件逻辑上定义的网络磁盘连接到后端存储的一个映射
+
+如何发布一个iscsi磁盘
+1.定义后端存储对象
+2.创建一个网络磁盘（iqn名称）
+3.映射真实设备到网络磁盘
+4.为iSCSI对象指定允许访问的客户机标识（iqn名称）
+5.为iscsi服务指定监听的地址及端口
+
+iqn名称：是iscsi网络磁盘规范的名称
+         iqn.年份-月份.反序区域名:自定义标记
+         iqn.yyyy-mm.com.example:server0
+         服务器是磁盘名,客户机是一个标识
+
+
+
+1.配置iscsi服务端
+server上操作:
+
+利用  fdisk  /dev/vdb  进行分区
+    划分一个3G的主分区
+
+   按p是查看分区表信息
+   按n创建新的分区
+   输入p是主分区
+   输入1是第一个主分区
+   起始 默认直接回车即可
+   结束 +3G
+   按p是查看分区表信息
+   按w保存退出
+[root@server0 ~]# ls /dev/vdb1
+定义iscsi服务端,磁盘组(target)
+
+[root@server0 ~]# yum -y install targetcli
+
+[root@server0 ~]# targetcli
+创建后端存储
+/> backstores/block create name=iscsi_store dev=/dev/vdb1 
+/> ls 
+
+创建target磁盘组,并命名磁盘组的名称(符合iqn格式)
+/> iscsi/ create iqn.2016-02.com.example:server0
+/> ls 
+
+将后端存储iscsi_store加入到磁盘(iqn.2016-02.com.example:server0)
+/> iscsi/iqn.2016-02.com.example:server0/tpg1/luns create /backstores/block/iscsi_store
+
+设置访问控制,只允许客户端以iqn......:desktop0的访问
+/> iscsi/iqn.2016-02.com.example:server0/tpg1/acls create iqn.2016-02.com.example:desktop0
+
+共享iscsi服务的端口 3260
+设置监听的IP和端口:
+
+/> iscsi/iqn.2016-02.com.example:server0/tpg1/portals create  172.25.0.11  ip_port=3260
+
+/> exit 退出,默认退出保存
+######################################################
+
+重起target服务,设置为开机自起,查看端口
+[root@server0 ~]# systemctl restart target
+[root@server0 ~]# systemctl enable target
+
+[root@server0 ~]# netstat -anptu | grep 3260
+tcp        0      0 172.25.0.11:3260        0.0.0.0:*               LISTEN      -                   
+
+设置防火墙策略
+[root@server0 ~]# firewall-cmd --set-default-zone=trusted 
+
+
+2.配置iscsi客户端
+客户端  desktop0
+
+# yum repolist    //先列出仓库信息
+
+# yum -y install iscsi-initiator-utils.i686  
+                                                           //安装iscsi客户端程序
+
+修改配置文件,指定以iqn......:desktop0名称去访问服务端
+
+# vim /etc/iscsi/initiatorname.iscsi 
+ InitiatorName=iqn.2016-02.com.example:desktop0
+
+# man  iscsiadm
+      输入  G  到全文的最后
+      向上找到EXAMPLES
+      将例子复制
+
+# iscsiadm --mode discovery --type sendtargets --portal 172.25.0.11 --discover
+  //该命令的输出 是能够看到 服务端的    iqn.2016-02.com.example:server0
+
+
+[root@desktop0 ~]# lsblk
+
+[root@desktop0 ~]# systemctl restart iscsid #刷新iqn名称
+[root@desktop0 ~]# systemctl restart iscsi  #加载共享存储
+[root@desktop0 ~]# lsblk
+
+[root@desktop0 ~]# systemctl enable iscsi
+[root@desktop0 ~]# systemctl enable iscsid
+
+#################################################
+[root@desktop0 ~]# fdisk /dev/sda
+       按p是查看分区表信息
+       按n创建新的分区
+       输入p是主分区
+       输入1是第一个主分区
+       起始 默认直接回车即可
+       结束 +2100M
+       按p是查看分区表信息
+       按w保存退出               
+[root@desktop0 ~]# ls /dev/sda1
+
+[root@desktop0 ~]# mkfs.ext4 /dev/sda1   #格式化成ext4
+[root@desktop0 ~]# mkdir /mnt/test       #创建挂载点
+[root@desktop0 ~]# blkid /dev/sda1    #查看设备UUID值
+[root@desktop0 ~]# vim  /etc/fstab    #设置开机自动挂载
+UUID=......   /mnt/test  ext4   _netdev  0 0
+[root@desktop0 ~]# mount  -a
+
+
+
+
+
+
+

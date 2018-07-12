@@ -1,0 +1,414 @@
+1.9  向集群中添加新主机 ， 默认新主机的角色是master ， 要把集群中 master主机的hash槽 分配给 新添加的节点主机 
+
+1.10  把删除的主机再添加到集群中时， 要先清除主机在集群中的状态， 连接后redis服务后执行 cluster  reset  删除主机在集群中的状态，才可以把主机添加到集群中
+
+
+1.11  把主节点从集群中删除，要先移除主节点主机占用 hash槽 的个数 ，再删除主机
+
+
+1.12 删除从节点主机则不用，直接删除节点主机即可 因为从节点主机没有 hash槽。
+
+
+
+
+ot@redis93 src]# ./redis-trib.rb  add-node  192.168.2.93:6393  192.168.2.94:6394
+>>> Adding node 192.168.2.93:6393 to cluster 192.168.2.94:6394
+>>> Performing Cluster Check (using node 192.168.2.94:6394)
+S: a62a0a06c49727663a607f4c633035533c123a9f 192.168.2.94:6394
+   slots: (0 slots) slave
+   replicates 8eecda17577349125df9a6fcc37107c6c5f9bdc5
+M: 6925b8f52759be6cbcd1a194993666388c4cf3c3 192.168.2.95:6395
+   slots:5461-10922 (5462 slots) master
+   1 additional replica(s)
+M: 484ec26017c42f139c459286d8273766723d14c2 192.168.2.96:6396
+   slots:10923-16383 (5461 slots) master
+   1 additional replica(s)
+M: 8eecda17577349125df9a6fcc37107c6c5f9bdc5 192.168.2.97:6397
+   slots:0-5460 (5461 slots) master
+   1 additional replica(s)
+S: 4cd2afe2ec508faf4854e023a75543ebcad87553 192.168.2.99:6399
+   slots: (0 slots) slave
+   replicates 484ec26017c42f139c459286d8273766723d14c2
+S: 639ec91171405047673323f076b68bcd9362fcb7 192.168.2.98:6398
+   slots: (0 slots) slave
+   replicates 6925b8f52759be6cbcd1a194993666388c4cf3c3
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+>>> Send CLUSTER MEET to node 192.168.2.93:6393 to make it join the cluster.
+[OK] New node added correctly.
+[root@redis93 src]# 
+
+
+检查时 发现主机93 是 M 状态 ，但没有分配槽位。
+[root@redis93 src]# ./redis-trib.rb  check  192.168.2.93:6393 
+>>> Performing Cluster Check (using node 192.168.2.93:6393)
+M: f6649ea99b2f01faca26217691222c17a3854381 192.168.2.93:6393
+   slots: (0 slots) master
+   0 additional replica(s)
+M: 8eecda17577349125df9a6fcc37107c6c5f9bdc5 192.168.2.97:6397
+   slots:0-5460 (5461 slots) master
+   1 additional replica(s)
+S: a62a0a06c49727663a607f4c633035533c123a9f 192.168.2.94:6394
+   slots: (0 slots) slave
+   replicates 8eecda17577349125df9a6fcc37107c6c5f9bdc5
+M: 484ec26017c42f139c459286d8273766723d14c2 192.168.2.96:6396
+   slots:10923-16383 (5461 slots) master
+   1 additional replica(s)
+M: 6925b8f52759be6cbcd1a194993666388c4cf3c3 192.168.2.95:6395
+   slots:5461-10922 (5462 slots) master
+   1 additional replica(s)
+S: 639ec91171405047673323f076b68bcd9362fcb7 192.168.2.98:6398
+   slots: (0 slots) slave
+   replicates 6925b8f52759be6cbcd1a194993666388c4cf3c3
+S: 4cd2afe2ec508faf4854e023a75543ebcad87553 192.168.2.99:6399
+   slots: (0 slots) slave
+   replicates 484ec26017c42f139c459286d8273766723d14c2
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+[root@redis93 src]# 
+
+连接查看槽位信息 也是没有的
+[root@redis93 src]# /usr/local/redis/bin/redis-cli -c -h 192.168.2.93  -p 6393 
+192.168.2.93:6393> cluster nodes
+8eecda17577349125df9a6fcc37107c6c5f9bdc5 192.168.2.97:6397 master - 0 1513923870145 7 connected 0-5460
+a62a0a06c49727663a607f4c633035533c123a9f 192.168.2.94:6394 slave 8eecda17577349125df9a6fcc37107c6c5f9bdc5 0 1513923869144 7 connected
+484ec26017c42f139c459286d8273766723d14c2 192.168.2.96:6396 master - 0 1513923869645 3 connected 10923-16383
+6925b8f52759be6cbcd1a194993666388c4cf3c3 192.168.2.95:6395 master - 0 1513923871146 2 connected 5461-10922
+639ec91171405047673323f076b68bcd9362fcb7 192.168.2.98:6398 slave 6925b8f52759be6cbcd1a194993666388c4cf3c3 0 1513923871146 2 connected
+4cd2afe2ec508faf4854e023a75543ebcad87553 192.168.2.99:6399 slave 484ec26017c42f139c459286d8273766723d14c2 0 1513923870647 3 connected
+f6649ea99b2f01faca26217691222c17a3854381 192.168.2.93:6393 myself,master - 0 0 0 connected
+192.168.2.93:6393>
+
+手动对集群进行重新分片迁移数据
+[root@redis93 src]# ./redis-trib.rb  reshard 192.168.2.94:6394
+>>> Performing Cluster Check (using node 192.168.2.94:6394)
+S: a62a0a06c49727663a607f4c633035533c123a9f 192.168.2.94:6394
+   slots: (0 slots) slave
+   replicates 8eecda17577349125df9a6fcc37107c6c5f9bdc5
+M: f6649ea99b2f01faca26217691222c17a3854381 192.168.2.93:6393
+   slots:0-1364,5461-6826,10923-12287 (4096 slots) master
+   0 additional replica(s)
+M: 6925b8f52759be6cbcd1a194993666388c4cf3c3 192.168.2.95:6395
+   slots:6827-10922 (4096 slots) master
+   1 additional replica(s)
+M: 484ec26017c42f139c459286d8273766723d14c2 192.168.2.96:6396
+   slots:12288-16383 (4096 slots) master
+   1 additional replica(s)
+M: 8eecda17577349125df9a6fcc37107c6c5f9bdc5 192.168.2.97:6397
+   slots:1365-5460 (4096 slots) master
+   1 additional replica(s)
+S: 4cd2afe2ec508faf4854e023a75543ebcad87553 192.168.2.99:6399
+   slots: (0 slots) slave
+   replicates 484ec26017c42f139c459286d8273766723d14c2
+S: 639ec91171405047673323f076b68bcd9362fcb7 192.168.2.98:6398
+   slots: (0 slots) slave
+   replicates 6925b8f52759be6cbcd1a194993666388c4cf3c3
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+How many slots do you want to move (from 1 to 16384)? 4096    （因为一共有4个主节点 想平均分配 16384/4=4096）
+What is the receiving node ID? f6649ea99b2f01faca26217691222c17a3854381 此处输入93主机的ID 意思是给93主机分配4096个槽
+Please enter all the source node IDs.
+  Type 'all' to use all the nodes as source nodes for the hash slots.
+  Type 'done' once you entered all the source nodes IDs.
+Source node #1:all  意思是从所有主节点主机获取  也可以从某个主节点主机获取  出提示信息后输入yes 开始分配
+
+查看分配的槽位
+[root@redis93 src]# ./redis-trib.rb  check 192.168.2.93:6393
+>>> Performing Cluster Check (using node 192.168.2.93:6393)
+M: f6649ea99b2f01faca26217691222c17a3854381 192.168.2.93:6393
+   slots:0-1364,5461-6826,10923-12287 (4096 slots) master       从3个主节点主机上获取的槽位数量
+   0 additional replica(s)
+M: 8eecda17577349125df9a6fcc37107c6c5f9bdc5 192.168.2.97:6397
+   slots:1365-5460 (4096 slots) master
+   1 additional replica(s)
+S: a62a0a06c49727663a607f4c633035533c123a9f 192.168.2.94:6394
+   slots: (0 slots) slave
+   replicates 8eecda17577349125df9a6fcc37107c6c5f9bdc5
+M: 484ec26017c42f139c459286d8273766723d14c2 192.168.2.96:6396
+   slots:12288-16383 (4096 slots) master
+   1 additional replica(s)
+M: 6925b8f52759be6cbcd1a194993666388c4cf3c3 192.168.2.95:6395
+   slots:6827-10922 (4096 slots) master
+   1 additional replica(s)
+S: 639ec91171405047673323f076b68bcd9362fcb7 192.168.2.98:6398
+   slots: (0 slots) slave
+   replicates 6925b8f52759be6cbcd1a194993666388c4cf3c3
+S: 4cd2afe2ec508faf4854e023a75543ebcad87553 192.168.2.99:6399
+   slots: (0 slots) slave
+   replicates 484ec26017c42f139c459286d8273766723d14c2
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+[root@redis93 src]#
+
+登录后查看槽位信息
+[root@redis93 src]# /usr/local/redis/bin/redis-cli -c -h 192.168.2.93  -p 6393 
+192.168.2.93:6393> cluster nodes
+8eecda17577349125df9a6fcc37107c6c5f9bdc5 192.168.2.97:6397 master - 0 1513925957509 7 connected 1365-5460
+a62a0a06c49727663a607f4c633035533c123a9f 192.168.2.94:6394 slave 8eecda17577349125df9a6fcc37107c6c5f9bdc5 0 1513925955505 7 connected
+484ec26017c42f139c459286d8273766723d14c2 192.168.2.96:6396 master - 0 1513925956005 3 connected 12288-16383
+6925b8f52759be6cbcd1a194993666388c4cf3c3 192.168.2.95:6395 master - 0 1513925956506 2 connected 6827-10922
+639ec91171405047673323f076b68bcd9362fcb7 192.168.2.98:6398 slave 6925b8f52759be6cbcd1a194993666388c4cf3c3 0 1513925957007 2 connected
+4cd2afe2ec508faf4854e023a75543ebcad87553 192.168.2.99:6399 slave 484ec26017c42f139c459286d8273766723d14c2 0 1513925957509 3 connected
+f6649ea99b2f01faca26217691222c17a3854381 192.168.2.93:6393 myself,master - 0 0 8 connected 0-1364 5461-6826 10923-12287
+192.168.2.93:6393> 
+192.168.2.93:6393> cluster info
+cluster_state:ok
+cluster_slots_assigned:16384
+cluster_slots_ok:16384
+cluster_slots_pfail:0
+cluster_slots_fail:0
+cluster_known_nodes:7
+cluster_size:4
+cluster_current_epoch:8
+cluster_my_epoch:8
+cluster_stats_messages_sent:18540
+cluster_stats_messages_received:18525
+192.168.2.93:6393> 
+192.168.2.93:6393> get name   依然可以获取到先存取的数据。
+"jerry"
+192.168.2.93:6393>
+
+2.2 添加从节点
+把主机192.168.2.92添加进集群 做从节点
+装包  修改配置文件 启动redis服务，
+yum -y  install  gcc gcc-c++  ruby  rubygems
+tar -zxf redis-3.2.0.tar.gz
+cd redis-3.2.0/
+make
+make install PREFIX=/usr/local/redis
+cp redis.conf  /usr/local/redis/
+vim /usr/local/redis/redis.conf
+/usr/local/redis/bin/redis-server  /usr/local/redis/redis.conf
+netstat -utnalp  | grep redis
+systemctl  stop firewalld
+setenforce 0
+rpm -ivh --nodeps ruby-devel-2.0.0.648-30.el7.x86_64.rpm 
+gem install redis-3.2.1.gem 
+
+添加从节点
+# ./redis-trib.rb add-node --slave --master-id id值  192.168.2.92:6392 192.168.2.94:6394
+如果不指定主节点的id 的话，会把新节点 随机添加为 从节点 最少的主的从。
+
+
+[root@redis92 ~]# redis-3.2.0/src/redis-trib.rb  add-node --slave  192.168.2.92:6392  192.168.2.94:6394
+>>> Adding node 192.168.2.92:6392 to cluster 192.168.2.94:6394
+>>> Performing Cluster Check (using node 192.168.2.94:6394)
+S: a62a0a06c49727663a607f4c633035533c123a9f 192.168.2.94:6394
+   slots: (0 slots) slave
+   replicates 8eecda17577349125df9a6fcc37107c6c5f9bdc5
+M: f6649ea99b2f01faca26217691222c17a3854381 192.168.2.93:6393
+   slots:0-1364,5461-6826,10923-12287 (4096 slots) master
+   0 additional replica(s)
+M: 6925b8f52759be6cbcd1a194993666388c4cf3c3 192.168.2.95:6395
+   slots:6827-10922 (4096 slots) master
+   1 additional replica(s)
+M: 484ec26017c42f139c459286d8273766723d14c2 192.168.2.96:6396
+   slots:12288-16383 (4096 slots) master
+   1 additional replica(s)
+M: 8eecda17577349125df9a6fcc37107c6c5f9bdc5 192.168.2.97:6397
+   slots:1365-5460 (4096 slots) master
+   1 additional replica(s)
+S: 4cd2afe2ec508faf4854e023a75543ebcad87553 192.168.2.99:6399
+   slots: (0 slots) slave
+   replicates 484ec26017c42f139c459286d8273766723d14c2
+S: 639ec91171405047673323f076b68bcd9362fcb7 192.168.2.98:6398
+   slots: (0 slots) slave
+   replicates 6925b8f52759be6cbcd1a194993666388c4cf3c3
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+Automatically selected master 192.168.2.93:6393
+>>> Send CLUSTER MEET to node 192.168.2.92:6392 to make it join the cluster.
+Waiting for the cluster to join.
+>>> Configure node as replica of 192.168.2.93:6393.
+[OK] New node added correctly.
+[root@redis92 ~]# 
+
+[root@redis92 ~]# /usr/local/redis/bin/redis-cli -c -h 192.168.2.92 -p 6392
+192.168.2.92:6392> cluster nodes
+4cd2afe2ec508faf4854e023a75543ebcad87553 192.168.2.99:6399 slave 484ec26017c42f139c459286d8273766723d14c2 0 1513995390997 3 connected
+639ec91171405047673323f076b68bcd9362fcb7 192.168.2.98:6398 slave 6925b8f52759be6cbcd1a194993666388c4cf3c3 0 1513995395005 2 connected
+9c507832f99b9af53563646a06c5b0525e8fcb4a 192.168.2.92:6392 myself,slave f6649ea99b2f01faca26217691222c17a3854381 0 0 0 connected
+6925b8f52759be6cbcd1a194993666388c4cf3c3 192.168.2.95:6395 master - 0 1513995389995 2 connected 6827-10922
+a62a0a06c49727663a607f4c633035533c123a9f 192.168.2.94:6394 slave 8eecda17577349125df9a6fcc37107c6c5f9bdc5 0 1513995393002 7 connected
+484ec26017c42f139c459286d8273766723d14c2 192.168.2.96:6396 master - 0 1513995390497 3 connected 12288-16383
+f6649ea99b2f01faca26217691222c17a3854381 192.168.2.93:6393 master - 0 1513995391999 8 connected 0-1364 5461-6826 10923-12287
+8eecda17577349125df9a6fcc37107c6c5f9bdc5 192.168.2.97:6397 master - 0 1513995394003 7 connected 1365-5460
+192.168.2.92:6392> 
+192.168.2.92:6392> get name
+-> Redirected to slot [5798] located at 192.168.2.93:6393
+"jerry"
+192.168.2.93:6393> 
+
+
+++++++++++++++++++++++
+三、移除节点
+3.1 移除主节点  把主节点192.168.2.93移除  ./redis-trib del-node  
+
+[root@redis97 ~]# redis-3.2.0/src/redis-trib.rb  check 192.168.2.94:6394
+>>> Performing Cluster Check (using node 192.168.2.94:6394)
+S: a62a0a06c49727663a607f4c633035533c123a9f 192.168.2.94:6394
+   slots: (0 slots) slave
+   replicates 8eecda17577349125df9a6fcc37107c6c5f9bdc5
+M: 8eecda17577349125df9a6fcc37107c6c5f9bdc5 192.168.2.97:6397
+   slots:1365-5460 (4096 slots) master
+   1 additional replica(s)
+S: 4cd2afe2ec508faf4854e023a75543ebcad87553 192.168.2.99:6399
+   slots: (0 slots) slave
+   replicates 484ec26017c42f139c459286d8273766723d14c2
+M: f6649ea99b2f01faca26217691222c17a3854381 192.168.2.93:6393
+   slots:0-1364,5461-6826,10923-12287 (4096 slots) master
+   1 additional replica(s)
+M: 484ec26017c42f139c459286d8273766723d14c2 192.168.2.96:6396
+   slots:12288-16383 (4096 slots) master
+   1 additional replica(s)
+S: 639ec91171405047673323f076b68bcd9362fcb7 192.168.2.98:6398
+   slots: (0 slots) slave
+   replicates 6925b8f52759be6cbcd1a194993666388c4cf3c3
+S: 9c507832f99b9af53563646a06c5b0525e8fcb4a 192.168.2.92:6392
+   slots: (0 slots) slave
+   replicates f6649ea99b2f01faca26217691222c17a3854381
+M: 6925b8f52759be6cbcd1a194993666388c4cf3c3 192.168.2.95:6395
+   slots:6827-10922 (4096 slots) master
+   1 additional replica(s)
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+[root@redis97 ~]# redis-3.2.0/src/redis-trib.rb  del-node 192.168.2.93:6393 8eecda17577349125df9a6fcc37107c6c5f9bdc5
+>>> Removing node 8eecda17577349125df9a6fcc37107c6c5f9bdc5 from cluster 192.168.2.93:6393
+[ERR] Node 192.168.2.97:6397 is not empty! Reshard data away and try again.  提示不是空 不能移除 要先删除槽数。 才可以删除
+[root@redis97 ~]# 
+
+
+[root@redis97 ~]# redis-3.2.0/src/redis-trib.rb reshard 192.168.2.94:6394   ###当集群中所有主机都有hash槽时，执行此命令 就是删除主机的hash槽
+>>> Performing Cluster Check (using node 192.168.2.94:6394)
+S: a62a0a06c49727663a607f4c633035533c123a9f 192.168.2.94:6394
+   slots: (0 slots) slave
+   replicates 8eecda17577349125df9a6fcc37107c6c5f9bdc5
+M: 8eecda17577349125df9a6fcc37107c6c5f9bdc5 192.168.2.97:6397
+   slots:1365-5460 (4096 slots) master
+   1 additional replica(s)
+S: 4cd2afe2ec508faf4854e023a75543ebcad87553 192.168.2.99:6399
+   slots: (0 slots) slave
+   replicates 484ec26017c42f139c459286d8273766723d14c2
+M: f6649ea99b2f01faca26217691222c17a3854381 192.168.2.93:6393
+   slots:0-1364,5461-6826,10923-12287 (4096 slots) master
+   1 additional replica(s)
+M: 484ec26017c42f139c459286d8273766723d14c2 192.168.2.96:6396
+   slots:12288-16383 (4096 slots) master
+   1 additional replica(s)
+S: 639ec91171405047673323f076b68bcd9362fcb7 192.168.2.98:6398
+   slots: (0 slots) slave
+   replicates 6925b8f52759be6cbcd1a194993666388c4cf3c3
+S: 9c507832f99b9af53563646a06c5b0525e8fcb4a 192.168.2.92:6392
+   slots: (0 slots) slave
+   replicates f6649ea99b2f01faca26217691222c17a3854381
+M: 6925b8f52759be6cbcd1a194993666388c4cf3c3 192.168.2.95:6395
+   slots:6827-10922 (4096 slots) master
+   1 additional replica(s)
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+How many slots do you want to move (from 1 to 16384)? 4096  #######移除的槽数
+What is the receiving node ID? 8eecda17577349125df9a6fcc37107c6c5f9bdc5  #######从那个节点上移除 节点主机id
+Please enter all the source node IDs.
+  Type 'all' to use all the nodes as source nodes for the hash slots.
+  Type 'done' once you entered all the source nodes IDs.
+Source node #1:f6649ea99b2f01faca26217691222c17a3854381  ######移动到那个节点上 节点主机id
+Source node #2:done  ####手动输入done
+
+Do you want to proceed with the proposed reshard plan (yes/no)? yes ######输入yes
+
+
+[root@redis97 ~]# redis-3.2.0/src/redis-trib.rb check 192.168.2.94:6394   #####再次查看
+>>> Performing Cluster Check (using node 192.168.2.94:6394)
+S: a62a0a06c49727663a607f4c633035533c123a9f 192.168.2.94:6394
+   slots: (0 slots) slave  ######零个 槽位数
+   replicates 8eecda17577349125df9a6fcc37107c6c5f9bdc5
+M: 8eecda17577349125df9a6fcc37107c6c5f9bdc5 192.168.2.97:6397
+   slots:0-6826,10923-12287 (8192 slots) master   ########有8192个槽位了
+   2 additional replica(s)
+S: 4cd2afe2ec508faf4854e023a75543ebcad87553 192.168.2.99:6399
+   slots: (0 slots) slave
+   replicates 484ec26017c42f139c459286d8273766723d14c2
+M: f6649ea99b2f01faca26217691222c17a3854381 192.168.2.93:6393
+   slots: (0 slots) master   ######没有槽位了
+   0 additional replica(s)
+M: 484ec26017c42f139c459286d8273766723d14c2 192.168.2.96:6396
+   slots:12288-16383 (4096 slots) master
+   1 additional replica(s)
+S: 639ec91171405047673323f076b68bcd9362fcb7 192.168.2.98:6398
+   slots: (0 slots) slave
+   replicates 6925b8f52759be6cbcd1a194993666388c4cf3c3
+S: 9c507832f99b9af53563646a06c5b0525e8fcb4a 192.168.2.92:6392
+   slots: (0 slots) slave
+   replicates 8eecda17577349125df9a6fcc37107c6c5f9bdc5
+M: 6925b8f52759be6cbcd1a194993666388c4cf3c3 192.168.2.95:6395
+   slots:6827-10922 (4096 slots) master
+   1 additional replica(s)
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+[root@redis97 ~]# 
+
+        
+移除节点           redis-3.2.0/src/redis-trib.rb del-node IP:端口  被移除节点主机id
+
+[root@redis93 ~]# redis-3.2.0/src/redis-trib.rb del-node 192.168.2.93:6393  f6649ea99b2f01faca26217691222c17a3854381  
+>>> Removing node f6649ea99b2f01faca26217691222c17a3854381 from cluster 192.168.2.93:6393
+>>> Sending CLUSTER FORGET messages to the cluster...
+>>> SHUTDOWN the node.
+[root@redis93 ~]# 
+
+
+
+[root@redis93 ~]# redis-3.2.0/src/redis-trib.rb check 192.168.2.93:6393    ########查看信息  就会少一个主节点
+[ERR] Sorry, can't connect to node 192.168.2.93:6393
+[root@redis93 ~]# 
+[root@redis97 ~]# redis-3.2.0/src/redis-trib.rb check 192.168.2.97:6397
+>>> Performing Cluster Check (using node 192.168.2.97:6397)
+M: 8eecda17577349125df9a6fcc37107c6c5f9bdc5 192.168.2.97:6397
+   slots:0-6826,10923-12287 (8192 slots) master
+   1 additional replica(s)
+M: 6925b8f52759be6cbcd1a194993666388c4cf3c3 192.168.2.95:6395
+   slots:6827-10922 (4096 slots) master
+   1 additional replica(s)
+S: 9c507832f99b9af53563646a06c5b0525e8fcb4a 192.168.2.92:6392
+   slots: (0 slots) slave
+   replicates 8eecda17577349125df9a6fcc37107c6c5f9bdc5
+S: 4cd2afe2ec508faf4854e023a75543ebcad87553 192.168.2.99:6399
+   slots: (0 slots) slave
+   replicates 484ec26017c42f139c459286d8273766723d14c2
+M: 484ec26017c42f139c459286d8273766723d14c2 192.168.2.96:6396
+   slots:12288-16383 (4096 slots) master
+   1 additional replica(s)
+S: 639ec91171405047673323f076b68bcd9362fcb7 192.168.2.98:6398
+   slots: (0 slots) slave
+   replicates 6925b8f52759be6cbcd1a194993666388c4cf3c3
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+[root@redis97 ~]# 
+
+3.2 移除从节点 从节点192.168.3.92 移除
+                                         任意IP和端口都可以     
+# redis-3.2.0/src/redis-trib.rb del-node 192.168.2.92:6392  被移除主机的ID
+
+[root@redis97 ~]# redis-3.2.0/src/redis-trib.rb del-node 192.168.2.92:6392 9c507832f99b9af53563646a06c5b0525e8fcb4a
+>>> Removing node 9c507832f99b9af53563646a06c5b0525e8fcb4a from cluster 192.168.2.92:6392
+>>> Sending CLUSTER FORGET messages to the cluster...
+>>> SHUTDOWN the node.
+[root@redis97 ~]#

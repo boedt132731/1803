@@ -1,0 +1,171 @@
+﻿
+  vncviewer  172.40.50.113:7000
+
+  http://172.40.50.113/rhce/
+
+
+RHCSA 核心考点列表
+####################################################
+
+一、开考准备 —— 
+1. 重设虚拟机的root密码
+
+2. 为虚拟机配置网络
+nmcli  connection  show
+nmcli  connection  modify  "连接名"  ipv4.method  manual  ipv4.addresses  "IPv4地址/掩码长度  默认网关地址"  ipv4.dns  DNS服务器地址   connection.autoconnect  yes
+nmcli  connection  up  "连接名"
+
+RHEL7.2 ——
+nmcli  connection  modify  "连接名"  ipv4.method  manual  ipv4.addresses  "IPv4地址/掩码长度"  ipv4.gateway    默认网关地址   ipv4.dns  DNS服务器地址     connection.autoconnect  yes
+
+添加新连接 ——
+nmcli  connection  add  con-name  "连接名"  ifname  "接口名"   type  ethernet
+
+删除连接 ——
+nmcli  connection  delete  "连接名" 
+
+配置主机名 ——
+vim  /etc/hostname
+或者 hostnamectl  set-hostname  主机名
+
+
+从考试真机访问虚拟机 ——
+1）直接访问虚拟机控制台：
+	快捷方式 ==》按钮（view、stop、poweroff、reset）
+2）推荐：ssh  -X  root@虚拟机地址
+
+
+二、系统管理任务 ——
+1. 添加YUM源
+3. 添加用户/组账号
+11. 配置用户账号
+4. 设置文件权限
+6. 建共用目录（SGID）
+5. 配置计划任务
+7. 升级内核
+wget  ....rpm
+rpm  -ivh  ....rpm
+uname  -r   	【旧版】
+reboot
+uname  -r  	【新版】
+
+
+
+
+三、文档管理 ——
+13. 查找文件（find）
+14. 检索文本（grep）
+16. 创建归档（tar）
+tar  -zcPf  备份文件名.tar.gz   被备份的文档.. ..
+tar  -jcPf  备份文件名.tar.bz2   被备份的文档.. ..
+tar  -JcPf  备份文件名.tar.xz   被备份的文档.. ..
+tar  -xPf  备份文件名.tar.gz  [-C  目标文件夹]
+
+
+
+
+四、配置应用客户端 ——
+10. 设置NTP时间同步客户端
+# rm -rf /etc/chrony.conf
+# yum  -y  reinstall  chrony
+# vim  /etc/chrony.conf
+.. ..
+
+8. 设置LDAP客户端
+图形配置工具：authconfig-gtk
+命令行配置工具：authconfig-tui
+
+
+9. 设置autofs触发挂载+NFS共享客户端
+autofs的用途：
+为LDAP用户自动挂载家目录（建挂载点、挂载/卸载资源、删除挂载点）
+
+# mkdir  用户家目录所在的上一层目录
+# yum  -y  install  autofs
+# vim  /etc/auto.master 			【全局配置】
+挂载点的父目录 	自定义挂载策略文件的存放路径
+/home/guests 	/etc/auto.abc
+
+# vim  /etc/auto.abc			【挂载策略文件】
+挂载点名 	-挂载参数		服务器地址:设备路径
+ldapuser1	-rw 	classroom:/home/guests/ldapuser1
+ldapuser2	-rw 	classroom:/home/guests/ldapuser2
+
+补充：适用于服务端的任何用户
+*			-rw		classroom:/home/guests/&
+
+
+# systemctl  restart  autofs
+# systemctl  enable  autofs
+
+
+
+
+
+
+五、磁盘分区及存储 ——
+
+考试环境：只有一块磁盘 /dev/vda（包括 /boot、/、剩余空间）
+
+先明确两个问题：
+1）需要增加几个分区？
+2）这些新分区的大小？
+
+15. 添加逻辑卷  > 800MiB
+vgcreate  -s PE大小   卷组名  空闲分区设备
+vgremove  卷组名
+
+
+2. 扩展逻辑卷 > 300MiB
+vgextend  卷组名   空闲分区设备
+lvextend  -L  大小  逻辑卷路径
+
+blkid  逻辑卷路径 		【确定的格式化类型 ext3/4、xfs】
+ext3/4 ==》 resize2fs  逻辑卷路径
+xfs ==》 xfs_growfs  逻辑卷路径
+
+12. 添加交换分区 = 512MiB
+
+
+fdisk  -l  /dev/vda 检查分区表类型（dos、gpt）
+
+决定分区操作：
+dos  ===》  fdisk  /dev/vda
+gpt  ===》  gdisk  /dev/vda  	【不需要扩展分区，primary】
+
+dos ===》将所有剩余空间作为扩展分区：
+# fdisk或gdisk  /dev/vda
+: p
+: n ==> e，分区编号默认，起始位置默认，结束位置默认
+: n ==> 类型l，编号默认，起始位置默认，结束位置+500M
+: n ==> 类型l，编号默认，起始位置默认，结束位置+1000M
+: n ==> 类型l，编号默认，起始位置默认，结束位置+512M
+: p
+: w
+# partprobe  /dev/vda
+# reboot
+
+
+
+
+
+    http://localhost/exam/  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+####################################################

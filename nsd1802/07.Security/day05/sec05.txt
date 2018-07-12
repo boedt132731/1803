@@ -1,0 +1,130 @@
+
+
+iptable -t 表名 -I/-A/-D/-F/-P 链名 -s/-d 
+								   -p tcp --dport/--sport
+									  udp
+									  icmp
+									-i/-o eth0
+                                                                                    -j  动作
+ACCEPT/DROP/REJECT
+
+
+
+
+filter
+nat
+mangle
+raw
+
+INPUT  目的ip地址是防火墙的ip地址
+OUTPUT 源ip地址是防火墙的ip地址
+FORWARD 源ip和目的ip都不是防火墙的ip地址
+
+nat
+POSTROUTING
+SNAT/MASQUERADE
+
+-m mac
+-m multiport
+-m iprange
+
+
+/etc/rc.local
+
+保存规则：
+service iptables save
+开机自动加载规则：
+systemctl enable iptables
+
+LAMP/LNMP
+zabbix
+./configure --enable-server --enable-proxy --enable-agent --with-mysql=/usr/bin/mysql_config --with-net-snmp --wich-curl
+
+vim /usr/local/etc/zabbix_server.conf
+DBHost=localhost
+DBName=zabbix
+DBUser=zabbix
+DBPassword=zabbix
+
+启动zabbix服务：
+useradd -r -s /sbin/nologin -N zabbix
+zabbix_server
+
+vim /usr/local/etc/zabbix_agentd.conf
+Server=127.0.0.1,192.168.2.5
+ServerActive=127.0.0.1,192.168.2.5
+Hostname=zabbixserver
+UnsafeUserParameters=1
+
+启动agent
+zabbix_agentd
+
+解决php依赖：
+yum install php-gd php-xml
+重启php服务：
+systemctl restart php-fpm
+
+yum install php-bcmath-5.4.16-42.el7.x86_64.rpm php-mbstring-5.4.16-42.el7.x86_64.rpm 
+重启php服务：
+systemctl restart php-fpm
+
+修改php的配置文件：
+vim /etc/php.ini
+post_max_size = 16M
+max_execution_time = 300
+max_input_time = 300
+date.timezone = Asia/Shanghai
+重启php服务：
+systemctl restart php-fpm
+
+登陆：
+Admin/zabbix
+
+
+
+安装agent
+useradd -s /sbin/nologin zabbix
+解决依赖包：
+yum install gcc
+yum install pcre-devel
+cd zabbix-3.4.4
+./configure --enable-agent
+make && make install
+启动agent:
+service zabbix_agentd status/start/restart/stop
+===
+/etc/init.d/zabbix_agentd start/restart/stop/status
+
+ 
+
+zabbix_get -s 192.168.2.100 -k system.cpu.load[percpu,avg5]
+
+vim /usr/local/etc/zabbix_agentd.conf
+Include=/usr/local/etc/zabbix_agentd.conf.d/
+cd /usr/local/etc/zabbix_agentd.conf.d
+vim user.num
+UserParameter=user.num,wc -l /etc/passwd | awk '{print $1}'
+
+			   监控项1 --  图形1
+模板 -- 应用集1 -- 监控项2 -- 图形2
+           应用集2
+
+节点与模板链接
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

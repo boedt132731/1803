@@ -1,0 +1,105 @@
+string
+list
+hash
+
+setbit  
+
+db.t1.save({name:"bob",age:21,email:"plj@163.com",homedir:"bj"})
+
+db.t1.save({name:"bob",age:21})
+
+> db.t1.find({name:"yaya"})
+
+> db.t1.findOne()
+
+> db.t1.remove({name:"bob"})
+> db.t1.remove({})
+
+> db.t1.drop()
+
++++++++++++++++++++++++++++++++
+> db.t2.save({name:"bob",addr:"beijing"})
+> db.t2.save({name:"jerry",addr:"shanghai",age:38,hy:false})
+> db.t2.save({name:"lucy",addr:"beijing",hy:true})
+> db.t2.save({name:"jerry",cunk:null})
+> db.t2.save({x:3,y:5.18})
+>db.t2.save( { name:"alice",pay:NumberInt(21888) } )
+>db.t2.save( { name:"alice2",pay:NumberInt(21888.23) } )
+>db.t2.save( { name:"alice3",pay:NumberLong(21888.23) } )
+>db.t2.save( { name:"alice3",pay:NumberLong(21888) } )
+> db.t2.save({name:"lili",email:["lili@163.com","lili@tedu.cn","lili@yahoo.net"]})
+>db.t2.save({ lname:"php",  code:function(){/*<?php echo "hello" ?> */}      })
+
+>db.t2.save( { name:"ijj" , birthday : new Date() } )
+> db.t2.find({name:"ijj"})
+{ "_id" : ObjectId("5b1f3c8e24be707d7672c5bf"), "name" : "ijj", "birthday" : ISODate("2018-06-12T03:22:54.300Z") }
+
+> db.t2.save( { number:ObjectId(),   name:"yaya"})
+> db.t2.find({name:"yaya"})
+
+db.t2.save({name:"bob",match:/^a/})
+> db.t2.find({name:"bob"})
+
+>db.t2.save({  ywzd:{zuozhe:"dmy",jg:78,banben:"v2"}   })
+
+root:x:0:0:root:/root:/bin/bash
+系统管理员root用户的信息存储到 mongodb服务器的usedb库下user集合里。查看存储的文档信息。
+
+use userdb
+
+db.user.save( {name:"root",password:"x",uid:0,gid:0,comment:"root",homedir:"/root",shell:"/bin/bash"} )
+
+db.user.find()
+
+++++++++++++++++++++++++++++++
+db.user.save( {name:"lucy",password:"x",uid:0,gid:0,comment:"root",homedir:"/root",shell:"/bin/bash"} )
+
+
+数据导出
+mkdir  /mdir
+[root@host51 ~]# mongoexport --host 192.168.4.51 \
+--port 27051  -d  userdb  -c user  \
+-f name,uid,gid  --type=csv > /mdir/user.csv
+
+
+[root@host51 ~]# mongoexport --host 192.168.4.51  \
+--port 27051 -d  userdb  -c user   \
+--type=json  >  /mdir/user.json
+
+[root@host51 ~]# mongoexport --host 192.168.4.51 --port 27051 -d  userdb  -c user  -f  name,uid  --type=json > /mdir/user2.json
+
+
+
+数据导入   csv  |  json
+
+[root@host51 ~]# mongoimport --host 192.168.4.51 --port 27051  \
+-d  webdb  -c userinfo  --type=json    /mdir/user.json 
+
+]#mongoimport --host 192.168.4.51 --port 27051 -d  userdb  -c user  -f name,uid,gid,shell --type=csv  /mdir/user.csv
+
+]#mongoimport --host 192.168.4.51 --port 27051 -d  userdb  -c user  -f nameuser,useruid,usergid,usershell --type=csv  /mdir/user.csv
+
+[root@host51 ~]# mongoimport --host 192.168.4.51 --port 27051 -d  userdb  -c user   --type=csv --headerline --drop /mdir/user.csv
++++++++++++++++++++++++++++++++++
+把 /etc/passwd 文件内容存储到mongodb服务器webdb库下的userinfo集合里。
+
+  318  cp /etc/passwd  ./
+  319  ls
+  320  sed -i  's/:/,/g' passwd 
+  321  vim passwd 
+  322  ls
+  323  sed -i   '$r  passwd'  userinfo.csv 
+
+[root@host51 ~]# mongoimport --host 192.168.4.51 --port 27051 -d  webdb  -c userinfo  --type=csv  --headerline   /mdir/userinfo.csv 
+
+
+[root@host51 mbak]# mongodump --host 192.168.4.51 --port 27051 
+
+
+[root@host51 mbak]# mongodump --host 192.168.4.51 --port 27051  -d bbsdb  -c  t2  -o  /bbsdbbak
+
+
+mongodump --host 192.168.4.51 --port 27051  -d bbsdb    -o  /bbsdbbakall
+
+
+

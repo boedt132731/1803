@@ -1,0 +1,96 @@
+重启audit服务：
+service auditd restart
+service auditd stop
+
+audit日志文件：
+/var/log/audit/audit.log
+
+一个终端上打开日子调试模式：
+tail -f /var/log/audit/audit.log 
+
+另一个终端上操作
+
+
+看日志
+ausearch -k passwd_change
+
+通常审计的目录
+/etc  /tmp
+
+规则文件：/etc/audit/rules.d/audit.rules
+-w /etc/passwd -p wa -k passwd_change
+-w /usr/sbin/fdisk -p x -k disk_partition
+-w /tmp -p rwxa -k temp_dir
+
+安装nginx
+yum install gcc pcre-devel openssl-devel
+./configure --without-http_ssi_module --without-http_autoindex_module
+make
+make install
+
+去掉404页面上的nginx显示
+vim /usr/local/nginx/conf/nginx.conf
+error_page 404 /404.html
+echo jacob > /usr/local/nginx/html/404.html
+nginx -s reload
+
+
+mysql
+yum search mariadb
+
+安装mysql
+yum install mariadb-server mariadb
+systemctl start mariadb
+执行初始化安全脚步：
+mysql_secure_installation
+
+登陆数据库：
+mysql -uroot -p
+
+在mysql的命令行下设置密码：
+set password for root@'localhost'=password('redhat');
+
+备份表
+mysqldump -uroot -p mysql user > user.sql
+
+备份库
+mysqldump -uroot -p mysql  > mysql.sql
+
+还原：
+[root@vpn ~]# mysql -uroot -p mysql < user.sql 
+Enter password: 
+[root@vpn ~]# mysql -uroot -p mysql < mysql.sql 
+Enter password: 
+[root@vpn ~]# mysql -uroot -p < all.sql 
+Enter password: 
+
+
+mysql客户端
+yum install mariadb
+
+
+tomcat
+安装
+tar xf apache-tomcat-8.0.30.tar.gz -C /usr/local/
+cd /usr/local
+mv apache-tomcat-8.0.30 tomcat
+
+启动
+cd tomcat/bin
+./startup.sh
+netstat -natpu|grep :8080
+
+server.info=jacob/100.0
+server.number=100.0
+
+
+补丁：
+yum install patch
+
+
+
+
+
+
+
+

@@ -1,0 +1,583 @@
+
+
+
+集群与存储
+   分布式存储：ceph 
+
+存储技术与应用
+存储概述：
+存储的目标
+	存储是根据不同的应用环境通过采取合理、安全、有效的方式将数据保存到某些介质上并能保证有效的访问
+	 一方面它是数据临时或长期驻留的物理媒介
+	另一方面,它是保证数据完整安全存放的方式或行为
+	存储就是把这两个方面结合起来,向客户提供一套数据存放解决方案
+
+存储技术分类：
+	SCSI小型计算机系统接口
+	DAS直连式存储
+	NAS网络技术存储
+	SAN存储区域网络
+	FC光纤通道
+
+
+常见存储技术
+
+1.SCSI技术
+	作为输入/输出接口
+	主要用于硬盘、光盘、磁带机等设备
+
+2.DAS技术：直连式存储
+	将存储设备通过SCSI接口或光纤通道直接连接到计算机上
+	不能实现数据与其他主机的共享
+	占用服务器操作系统资源,如CPU、IO等
+	数据量越大,性能越差
+
+3.NAS技术:网络技术存储
+	一种专用数据存储服务器,以数据为中心,将存储设备与服务器彻底分离,集中管理数据,从而释放带宽、提高性能、降低总拥有成本、保护投资
+	用户通过TCP/IP协议访问数据 ， 采用标准的NFS/HTTTP/CIFS等
+
+
+4.SAN技术：专门存储区域网络
+	 通过光纤交换机、光纤路由器、光纤集线器等设备将磁盘阵列、磁带等存储设备与相关服务器连接起来,形成高速专网网络
+
+组成部分
+	如路由器、光纤交换机
+	接口：如SCSI、FC
+	通信协议：如IP、SCSI
+
+IP  SAN :基于ip网络的存储区域网络
+
+Fibre Channel
+	一种适合于千兆数据传输的、成熟而安全解决方案
+	与传统的SCSI相比,FC提供更高的数据传输速率、更远的传输距离、更多的设备连接支持以及更稳定的性能、更简易的安装
+
+FC主要组件：
+	光纤	
+	光纤交换机
+	HBA(主机总线适配置器)
+	FC交换机
+
+
+FC交换机交换拓扑
+点到点: point-to-point
+	简单将两个设备互连
+已裁定的环路: arbitrated loop
+	可多达126个设备共享一段信道或环路
+交换式拓扑: switched fabric  星型结构
+	所有设备通过光纤交换机互连
+
+
+5.SCSI技术
+	Internet SCSI
+	IETF制定的标准,将SCSI数据块映射为以太网数据包
+	是一种基于IP Storage理论的新型存储技术
+	将存储行业广泛应用的SCSI接口技术与IP网络相结合
+	可以在IP网络上构建SAN
+	最初由Cisco和IBM开发
+
+优势：
+	基于IP协议技术的标准，价格相对低廉，效果比光纤查
+	允许网络在TCP/IP协议上传输SCSI命令
+	相对FC SAN,iSCSI实现的IP SAN投资更低
+	解决了传输效率、存储容量、兼容性、开放性、安全性等方面的问题
+	没有距离限制
+
+客户端：
+	iSCSI Initiator:软件实现,成本低、性能较低，硬件稍微贵点
+	iSCSI HBA:硬件实现,性能好,成本较高
+
+存储设备端：
+	iSCSI Target
+	以太网交换机
+
+块级别存储：硬盘
+文件级别存储：共享文件夹
+
+
+一，iSCSI技术应用
+
+1.SCSI操作流程
+Target端：
+	选择target名称
+	安装iSCSI target
+	准备用于target的存储
+	配置target
+	启用服务
+Initiator端：
+	安装initiator
+	配置initiator并启动服务
+
+
+2.iSCSI命名规范
+	建议采用IQN(iSCSI限定名称)
+	全称必须全局唯一
+IQN格式:
+	iqn.<date_code>.<reversed_domain>.<string>[:<substring>]
+命名示例:
+	iqn.2013-01.com.tarena.tech:sata.rack2.disk1
+
+
+
+3.部署iSCSI服务
+3.1准备三台虚拟机，配置ip，yum源
+3.2初始化主机名
+vh01.tedu.cn   192.168.4.1/24
+vh02.tedu.cn   192.168.4.2/24
+vh03.tedu.cn   192.168.4.3/24
+配置ip：nmtui--->Edit--->Ethernet----->ipv4  回车  manual
+# systemctl  restart  NetworkManager
+
+
+做免密登录
+#ssh-keygen
+#ssh-copy-id  192.168.4.51/52/53
+
+人肉运维
+自运化运维： ansible  python
+
+
+3.3安装target软件
+服务端：
+[root@vh01 ~]# yum   install   -y  targetcli
+[root@vh01 ~]# yum  info  targetcli	查看iSCSI target信息
+
+3.4为存储端加一块硬盘
+   点灯泡，添加硬件，给70G吧
+ # lsblk  查看大小
+vdb     252:16   0   70G  0 disk 
+
+3.5分区
+
+[root@vh01 ~]# parted  /dev/vdb 
+GNU Parted 3.1
+使用 /dev/vdb
+Welcome to GNU Parted! Type 'help' to view a list of commands.
+(parted) mklabel   gpt  设置分区格式为gpt
+(parted)  mkpart  primary  1M  20% 
+(parted) quit    
+[root@vh01 ~]# lsblk  查看结果
+
+3.7创建iscsi服务端
+[root@vh01 ~]# targetcli 
+/> ls  查看当前配置状态
+/> /backstores/block   create   iscsidisk   /dev/vdb1  引入vdb1到iscsi，起名为iscsidisk（把分区加入后端存储）
+
+/> /iscsi  create   iqn.2018-05.cn.tedu.nsd1801  创建iqn，共享名称
+
+/> /iscsi/iqn.2018-05.cn.tedu.nsd1801/tpg1/luns   create  /backstores/block/iscsidisk  将创建的iscsidisk关联到iqn中（把共享名和后端的设备通过lun关联在一起）
+
+/> /iscsi/iqn.2018-05.cn.tedu.nsd1801/tpg1/acls   create  iqn.2018-05.cn.tedu.vh02   设置acl，指定哪个客户端可以访问该共享存储
+/> /iscsi/iqn.2018-05.cn.tedu.nsd1801/tpg1/acls   create  iqn.2018-05.cn.tedu.vh03
+
+/> /iscsi/iqn.2018-05.cn.tedu.nsd1801/tpg1/portals/   create  0.0.0.0  绑定服务监听在0.0.0.0上
+/> saveconfig   存盘
+/> exit  保存并退出
+ 
+[root@vh01 ~]# systemctl   restart   target
+[root@vh01 ~]# systemctl   enable   target
+[root@vh01 ~]# netstat  -ntulp  |  grep  3260
+tcp        0      0 0.0.0.0:3260            0.0.0.0:*               LISTEN      -                   
+
+
+3.8配置vh02和vh03为客户端，使用vh01的共享存储
+
+[root@vh02 ~]# yum  -y  install   iscsi-initiator-utils  在实验环境可以跳过，生产环境需要确认
+[root@vh02 ~]# vim   /etc/iscsi/initiatorname.iscsi
+InitiatorName=iqn.2018-05.cn.tedu.vh02  客户端名称，必须与targert的acl一致
+[root@vh02 ~]# man  iscsiadm  找参考命令，在最后
+[root@vh02 ~]# iscsiadm --mode discoverydb --type sendtargets --portal 192.168.4.1 --discover   发现存储
+192.168.4.1:3260,1 iqn.2018-05.cn.tedu.nsd1801
+[root@vh02 ~]# lsblk    此时还不会出现额外的硬盘
+NAME          MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+sr0            11:0    1 1024M  0 rom  
+
+[root@vh02 ~]# systemctl   restart  iscsi  重启iscsi即可自动login
+[root@vh02 ~]# lsblk    发现多出来了sda设备
+NAME          MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+sda             8:0    0   14G  0 disk 
+sr0            11:0    1 1024M  0 rom  
+
+[root@vh02 ~]# systemctl   enable  iscsi  用于自动login
+[root@vh02 ~]# systemctl   enable  iscsid   iscsid服务
+
+3.9在vh02上将sda分区格式化
+[root@vh02 ~]# parted   /dev/sda  将所有空间分一个分区即可
+(parted) mklabel  gpt                                                     
+(parted) mkpart   primary  1M  100%
+(parted) quit                                        
+
+[root@vh02 ~]# mkfs.ext4  /dev/sda1
+
+
+3.10在vh02上配置mariadb
+[root@vh02 ~]# yum  -y  install   mariadb-server
+[root@vh02 ~]# mount   /dev/sda1   /var/lib/mysql/
+[root@vh02 ~]# chown  mysql:mysql  /var/lib/mysql/
+[root@vh02 ~]# systemctl    restart  mariadb
+[root@vh02 ~]# mysql
+MariaDB [(none)]> create  database  tedu  default  charset  utf8;
+MariaDB [(none)]> use  tedu;
+MariaDB [tedu]> create   table  nsd1801(name  varchar(20));
+MariaDB [tedu]> insert  into   nsd1801  values('王美玲');
+MariaDB [tedu]> select  *   from  nsd1801;
+[root@vh02 ~]# shutdown  -h  now
+Connection to 192.168.4.2 closed by remote host.
+Connection to 192.168.4.2 closed.
+
+
+3.11在vh03上使用vh02的创建的数据库，继续提供服务
+不要试图多节点同时挂载共享存储，因为xfs/ext文件系统都是单一节点文件系统，如果多节点同时挂载，会导致分区结构损坏。红帽的GFS才能支持多节点同时挂载。
+
+不要试图多节点同时挂载共享存储
+
+[root@vh03 ~]# vim  /etc/iscsi/initiatorname.iscsi 
+InitiatorName=iqn.2018-05.cn.tedu.vh03
+[root@vh03 ~]# systemctl   restart iscsi
+[root@vh03 ~]# systemctl   restart iscsid
+[root@vh03 ~]# iscsiadm --mode discoverydb --type sendtargets --portal 192.168.4.1 --discover
+[root@vh03 ~]# systemctl  start  iscsi
+
+
+[root@vh03 ~]# yum  -y  install   mariadb-server
+[root@vh03 ~]# mount  /dev/sda1  /var/lib/mysql/
+[root@vh03 ~]# systemctl   restart  mariadb
+[root@vh03 ~]# mysql
+MariaDB [(none)]> use  tedu;
+MariaDB [tedu]> show  tables;
++----------------+
+| Tables_in_tedu |
++----------------+
+| nsd1801        |
++----------------+
+
+
+
+
+
+
+二，udev配置
+硬件设备也是文件，存储在/dev下，udev是用来动态管理硬件设备文件（u盘，iscsi硬盘）的
+
+
+udev设备文件管理方法
+devfs：
+	inux早期采用的静态管理方法
+	/dev目录下有大量静态文件
+	内核版本2.6.13开始被完全取代
+udev：
+	只有连到系统上来的设备才在/dev下创建设备文件
+	与主、次设备编号无关
+	为设备提供持久、一致的名字
+
+
+接入设备事件链：
+	内核发现设备并导入设备状态到sysfs
+	udev接到事件通知
+	udev创建设备节点或是运行指定程序
+	udev通知hald守护进程
+	HAL探测设备信息
+	HAL创建设备对象结构
+	HAL通过系统消息总线广播该事件
+	用户程序也可以监控该事件
+
+
+udev的作用：
+1.从内核收到添加/移除硬件事件时,udev将会分析:
+	/sys目录下信息
+	/etc/udev/rules.d目录中的规则
+2.基于分析结果,udev会:
+	处理设备命名
+	决定要创建哪些设备文件或链接
+	决定如何设置属性
+	决定触发哪些事件
+
+
+
+udev应用
+
+
+udev事件监控
+
+配置udev
+主配置文件/etc/udev/udev.conf
+udev_root:创建设备文件位置,默认为/dev
+udev_rules:udev规则文件位置,默认为/etc/udev/rules.d
+udev_log:syslog优先级,缺省为err
+
+udev：动态管理硬件文件的管理方法：
+1.规则文件命名：数字-自定义名字.rules，数字编号是生效顺序
+2.udev规则只有在硬件设备连接上或是取下的时候才生效
+3.规则编写，判断是否满足条件用==或！= ，赋值用=
+
+udev操作符
+操作符
+	= :指定赋予的值
+	+= :添加新值
+	:= :指定值,且不允许被替换
+
+udev变量：
+常用替代变量
+%k：内核所识别出来的设备名,如sdb1
+%n：设备的内核编号,如sda3中的3
+%p：设备路径,如/sys/block/sdb/sdb1
+%% ：%符号本身
+
+
+设置接入的U盘名字为/dev/udisk
+1. 查看U盘在/sys/目录中的位置
+[root@vh03 rules.d]# udevadm  info  --query=path  --name=/dev/sda1 等号后面不能有空格
+/devices/platform/host2/session1/target2:0:0/2:0:0:0/block/sda/sda1
+
+2.查看U盘信息
+[root@vh03 rules.d]# udevadm  info  --query=all  --attribute-walk  --path=/devices/platform/host2/session1/target2:0:0/2:0:0:0/block/sda/sda1   取硬件信息,,host2/session1/target2:0:0/2:0:0:0这的值是不固定的
+
+3、创建规则
+[root@vh03 ~]# cd  /etc/udev/rules.d/
+[root@vh03 rules.d]# vim  90-udisk.rules
+ACTION=="add",KERNEL=="sd[a-z]*",SUBSYSTEMS=="scsi",SYMLINK+="udisk%n"
+如果系统接入硬件，内核识别出来的名字是sd[a-z]*，并且是iscsi的总线，那么就给它加上一个链接叫udisk1/2/3
+
+4、将U盘取下，再插上，查看新的名称
+[root@vh03 rules.d]# systemctl   stop  mariadb
+[root@vh03 rules.d]# umount  /var/lib/mysql/
+
+[root@vh03 rules.d]# iscsiadm --mode node --targetname iqn.2018-05.cn.tedu.nsd1801 --portal 192.168.4.1:3260 --logout
+[root@vh03 rules.d]# iscsiadm --mode node --targetname iqn.2018-05.cn.tedu.nsd1801 --portal 192.168.2.5:3260 --logout
+[root@vh03 rules.d]# iscsiadm --mode node --targetname iqn.2018-05.cn.tedu.nsd1801 --portal 192.168.4.1:3260 --login
+[root@vh03 rules.d]# iscsiadm --mode node --targetname iqn.2018-05.cn.tedu.nsd1801 --portal 192.168.2.5:3260 --login
+
+
+[root@vh03 rules.d]# systemctl  start  iscsi
+[root@vh03 rules.d]# systemctl  enable  iscsi
+[root@vh03 rules.d]# systemctl  restart  iscsi
+
+[root@vh03 rules.d]# ls  /dev/udisk*
+/dev/udisk  /dev/udisk1
+
+
+Windows下将fat32分区，如g盘，改为ntfs：    convert g: /fs:ntfs
+
+网络文件系统：
+CIFS：Common Internet FileSystem (SAMBA)
+NFS：Network FileSystem
+
+
+NFS
+文件系统的类型：
+本地文件系统
+	EXT3/4、SWAP、NTFS等   本地磁盘
+伪文件系统
+	/proc、/sys等     内存空间	
+网络文件系统
+	NFS    网络存储空间
+
+NFS共享协议：
+Unix/Linux最基本的文件共享机制
+	1980年由SUN公司开发
+	依赖于RPC(远程过程调用)映射机制
+	存取位于远程磁盘中的文档数据,对应用程序是透明的,就好像访问本地的文件一样
+
+一，NFS本身只提供了共享功能，底层数据传输需要使用RPC服务(rpcbind)
+二，只读共享
+1、vh01作为服务器
+[root@vh01 ~]# yum install -y nfs-utils
+[root@vh01 ~]# mkdir -p /nfsroot/nfsro
+[root@vh01 ~]# cp /etc/hosts /nfsroot/nfsro/
+
+
+2、编辑共享输出，允许所有主机访问共享目录
+[root@vh01 ~]# vim /etc/exports
+/nfsroot/nfsro  *(ro)    注意*和()之间不能有空格
+
+
+3、起动相应服务并验证
+[root@vh01 ~]# systemctl restart rpcbind
+[root@vh01 ~]# systemctl restart nfs
+[root@vh01 ~]# showmount -e 192.168.4.1  服务器，客户端都可以查看
+Export list for 192.168.4.1:
+/nfsroot/nfsro *
+
+
+4、在vh03上使用vh01提供的共享
+[root@vh03 ~]# yum install -y nfs-utils
+[root@vh03 ~]# mkdir /mnt/roshare
+[root@vh03 ~]# showmount -e 192.168.4.1
+[root@vh03 ~]# mount 192.168.4.1:/nfsroot/nfsro /mnt/roshare
+[root@vh03 ~]# ls /mnt/roshare
+hosts
+
+三、读写共享
+注意：不管用的是nfs还是samba还是ftp，只要是读写，都需要配置本地权限(如777)和配置文件内的权限
+1、服务器端配置
+[root@vh01 ~]# mkdir -m 777   /nfsroot/nfsrw
+[root@vh01 ~]# vim /etc/exports 追加一行
+/nfsroot/nfsrw  192.168.4.*(rw,sync)    sync表示客户机服务器同步读写
+[root@vh01 ~]# exportfs -rv   重新输出共享目录，不用重起服务
+
+
+2、客户端配置
+[root@vh03 ~]# mkdir /mnt/rwshare
+[root@vh03 ~]# mount 192.168.4.1:/nfsroot/nfsrw /mnt/rwshare
+[root@vh03 ~]# echo 'hello world' > /mnt/rwshare/hello.txt
+
+
+3、客户端写入的文件属主属组是nfsnobody
+[root@vh03 ~]# ll /mnt/rwshare/hello.txt 
+
+如果希望文件的属主属组还是root，可以在服务器上修改选项如下：
+/nfsroot/nfsrw  192.168.4.*(rw,sync,no_root_squash)
+
+
+
+Multipath多路径：防止单点故障
+
+多路径概述
+	当服务器到某一存储设备有多条路径时,每条路径都会识别为一个单独的设备
+	多路径允许您将服务器节点和储存阵列间的多个I/O路径配置为一个单一设备
+	这些 I/O 路径是可包含独立电缆、交换器和控制器的实体 SAN 链接
+	多路径集合了 I/O 路径,并生成由这些集合路径组成的新设备
+
+多路径主要功能
+	冗余：主备模式,高可用
+	改进的性能：主主模式,负载均衡
+
+多路径设备
+	若没有 DM Multipath,从服务器节点到储存控制器的每一条路径都会被系统视为独立的设备,即使 I/O路径连接的是相同的服务器节点到相同的储存控制器也是如此
+	DM Multipath 提供了有逻辑的管理 I/O 路径的方法,即在基础设备顶端生成单一多路径设备
+
+多路径设备识别符
+	每个多路径设备都有一个 WWID(全球识别符),它是全球唯一的、无法更改的号码
+	默认情况下会将多路径设备的名称设定为它的WWID
+	可以在多路径配置文件中设置user_friendly_names选项,该选项可将别名设为格式mpathn的节点唯一名称
+	也可以自定义存储设备名称
+
+
+
+1、为vh01和vh03再配置一个网络
+vh01.tedu.cn   eth1 192.168.2.5/24  
+vh03.tedu.cn   eth1 192.168.2.7/24
+添加网卡：
+# nmcli connection add   con-name   eth1  ifname   eth1   type  ethernet 
+
+
+2、在vh03上，通过192.168.2.5再发现一次设备，出现新的设备sdb
+[root@vh03 ~]# iscsiadm --mode discoverydb --type sendtargets --portal 192.168.2.5 --discover
+[root@vh03 ~]# systemctl restart iscsi
+[root@vh03 ~]# lsblk 
+NAME          MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+sda             8:0    0   14G  0 disk 
+└─sda1          8:1    0   14G  0 part 
+sdb             8:16   0   14G  0 disk 
+└─sdb1          8:17   0   14G  0 part 
+sdc             8:32   0   14G  0 disk 
+└─sdc1          8:33   0   14G  0 part 
+sr0            11:0    1 1024M  0 rom  
+
+
+3、在vh03上安装多路径软件
+[root@vh03 ~]# yum install -y device-mapper-multipath
+
+4、生成配置文件，不用系统自动生成设备名，由管理员自己指定
+[root@vh03 ~]# mpathconf --user_friendly_names n  加n系统才会生成/etc/multipath.conf多路径配置文件
+若无需编辑该配置文件,可使用此命令启动多路径守护程序
+
+
+5、查看共享存储的wwid
+[root@vh03 ~]# /lib/udev/scsi_id --whitelisted --device=/dev/sdb
+36001405163c77c53b384b6a93ca7807b
+[root@vh07 ~]# /lib/udev/scsi_id --whitelisted --device=/dev/sdc
+36001405163c77c53b384b6a93ca7807b
+
+因为两个设备虽然名称不一样,但是实际上是一个设备,所以他们的WWID是相同的
+
+6、编写配置文件
+[root@vh03 ~]# vim /etc/multipath.conf 
+23 defaults {
+24         user_friendly_names no
+25         find_multipaths yes  
+        getuid_callout "/lib/udev/scsi_id --whitelisted --device=/dev/%n"
+}					 获取WWID的方法
+multipaths {
+    multipath {
+        wwid    "36001405163c77c53b384b6a93ca7807b"  与上边的wwid相匹配
+        alias   "mpatha"     为多路径设备配置别名
+    }
+}
+7、起动服务并验证
+[root@vh03 ~]# systemctl start multipathd
+[root@vh03 ~]# ls /dev/mapper/mpatha*    mpatha即为多路径设备
+/dev/mapper/mpatha  /dev/mapper/mpatha1
+[root@vh03 rules.d]# lsblk 
+NAME          MAJ:MIN RM  SIZE RO TYPE  MOUNTPOINT
+sda             8:0    0   14G  0 disk  
+└─mpatha      253:2    0   14G  0 mpath 
+  └─mpatha1   253:3    0   14G  0 part  
+sdb             8:16   0   14G  0 disk  
+└─mpatha      253:2    0   14G  0 mpath 
+  └─mpatha1   253:3    0   14G  0 part  
+
+
+[root@vh03 ~]# mount /dev/mapper/mpatha1 /var/lib/mysql/
+[root@vh03 ~]# multipath -rr  查看多路径设备
+May 18 08:43:32 | /etc/multipath.conf line 26, invalid keyword: getuid_callout
+reload: mpatha (36001405163c77c53b384b6a93ca7807b) undef LIO-ORG ,iscsidisk       
+size=14G features='0' hwhandler='0' wp=undef
+|-+- policy='service-time 0' prio=1 status=undef
+| `- 2:0:0:0 sda 8:0  active ready running
+`-+- policy='service-time 0' prio=1 status=undef
+  `- 3:0:0:0 sdb 8:16 active ready running
+
+[root@vh03 ~]# multipath  -ll  查看多径信息	
+
+May 18 08:44:59 | /etc/multipath.conf line 26, invalid keyword: getuid_callout
+mpatha (36001405163c77c53b384b6a93ca7807b) dm-2 LIO-ORG ,iscsidisk       
+size=14G features='0' hwhandler='0' wp=rw
+|-+- policy='service-time 0' prio=1 status=active
+| `- 2:0:0:0 sda 8:0  active ready running
+`-+- policy='service-time 0' prio=1 status=enabled
+  `- 3:0:0:0 sdb 8:16 active ready running
+
+
+
+
+*************************************************************************
+
+【客户端检测不到磁盘】
+
+问题现象：
+
+iSCSI客户端可以发现target
+登陆之后,本地并没有出现新的磁盘设备
+
+故障分析及排除
+原因分析：
+	target端没有出现LUN1
+	对target端进行修改,重启服务后,target没有LUN1
+解决办法：
+	只能重启操作系统
+
+
+
+【NFS无法写入数据】
+
+问题现象：
+
+NFS服务器端已配置共享输出目录为读写权限
+客户端可以正常挂载服务器的输出目录
+客户端向服务器输出目录写入数据失败
+
+
+故障分析及排除
+原因分析：
+	服务器没有配置本地的写权限
+	输出目录权限的最终权限,由本地权限和配置文件内的权限共同决定
+解决办法：
+	将目录的本地权限改为777
+
+
+*********************************************************************************
+
+
+
+
+

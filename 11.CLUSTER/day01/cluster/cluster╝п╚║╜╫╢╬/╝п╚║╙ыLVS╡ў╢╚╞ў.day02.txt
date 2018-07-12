@@ -1,0 +1,382 @@
+
+
+
+
+集群简介
+
+什么是集群：
+	一组通过高速网络互联的计算组,并以单一系统的模式加以管理
+	将很多服务器集中起来一起,提供同一种服务,在客户端看来就象是只有一个服务器
+	可以在付出较低成本的情况下获得在性能、可靠性、灵活性方面的相对较高的收益
+	任务调度是集群系统中的核心技术
+
+
+集群目的：
+	提高性能：如计算密集型应用,如:天气预报、核试验模拟
+	降低成本：相对百万美元级的超级计算机,价格便宜
+	提高可扩展性：只要增加集群节点即可
+	增强可靠性：多个节点完成相同功能,避免单点失败
+
+
+重点：
+************************************************************************
+集群分类：                                                                       *
+	HPC：高性能计算集群,通过以集群开发的并行应用程序,解决复杂的科学问题 *
+	LB：负载均衡集群，客户端负载在计算机集群中尽可能平均分摊              *
+	HA：高可用集群，避免单点故障,当一个系统发生故障时,可以快速迁移       *
+                                                                                  *
+************************************************************************
+负载均衡集群调度器：nginx/lvs/haporxy/F5
+
+
+
+
+
+LVS概述
+
+LVS项目介绍：
+	Linux 虚拟服务器(LVS)是章文嵩在国防科技大学就读博士期间创建的
+	LVS可以实现高可用的、可伸缩的Web、Mail、Cache和Media等网络服务
+	最终目标是利用Linux操作系统和LVS集群软件实现一个高可用、高性能、低成本的服务器应用集群
+
+LVS集群组成
+	前端：负载均衡层
+		由一台或多台负载调度器构成
+	中间：服务器群组层
+		由一组实际运行应用服务的服务器组成
+	底端：数据共享存储层
+		提供共享存储空间的存储区域
+
+
+
+LVS术语：
+Director Server:调度服务器 【lvs】
+		将负载分发到Real Server的服务器
+Real Server:真实服务器  【web】
+		真正提供应用服务的服务器
+VIP:虚拟IP地址
+	公布给用户访问的虚拟IP地址
+RIP:真实IP地址
+	集群节点上使用的IP地址
+DIP:调度器连接节点服务器的IP地址
+
+
+LVS工作模式
+VS/NAT：
+	通过网络地址转换实现的虚拟服务器
+	大并发访问时,调度器的性能成为瓶颈
+VS/DR：
+	直接使用路由技术实现虚拟服务器
+	节点服务器需要配置VIP,注意MAC地址广播
+VS/TUN：
+	通过隧道方式实现虚拟服务器
+
+
+
+负载均衡调度算法：
+LVS目前实现了10种调度算法
+常用调度算法有4种
+	轮询(Round Robin)：将客户端请求平均分发到Real Server
+	加权轮询(Weighted Round Robin)：根据Real Server权重值进行轮询调度
+	最少连接(Least Connections)：选择连接数最少的服务器
+	加权最少连接( Weighted Least Connections )：根据Real Server权重值,选择连接数最少的服务器
+	源地址散列(Source Hashing)：根据请求的目标IP地址,作为散列键(Hash Key)从静态分配的散列表找出对应的服务器
+	其他调度算法：基于局部性的最少链接
+		       带复制的基于局部性最少链接
+		       目标地址散列(Destination Hashing)
+		       最短的期望的延迟
+		       最少队列调度
+
+
+
+
+
+
+准备LAMP分离环境
+
+一，准备四台虚拟机，全新的,免密登录
+vh05.tedu.cn   192.168.4.5   mysql
+vh06.tedu.cn   192.168.4.6   web
+vh07.tedu.cn   192.168.4.7   web
+vh08.tedu.cn   192.168.4.8   lvs
+
+二，安装web服务器
+1.在vh06/vh07上安装软件包
+[root@vh06 ~]# yum  -y  install  httpd  php  php-mysql
+[root@vh06 ~]# systemctl   restart  httpd
+[root@vh06 ~]# systemctl   enable  httpd
+
+三，配置数据库服务器，在vh05上
+[root@vh05 ~]# yum  -y  install   mariadb-server
+[root@vh05 ~]# systemctl   restart   mariadb
+[root@vh05 ~]# systemctl   enable   mariadb
+[root@vh05 ~]# mysql
+MariaDB [(none)]> grant  all   on  *.* to  'admin'@"%"   identified  by  "tedu.cn";
+
+四，在vh06上安装Discuz
+[root@room9pc01 ~]# scp   -r  888888/项目/Discuz_X3.3_SC_UTF8.zip  192.168.4.6:/root
+[root@vh06 ~]# unzip   Discuz_X3.3_SC_UTF8.zip
+[root@vh06 ~]# cp -r upload/ /var/www/html/bbs
+[root@vh06 ~]# chown -R apache.apache /var/www/html/bbs
+[root@room9pc01 ~]# firefox   http://192.168.4.6/bbs &
+同意---->下一步----> 数据库服务器:192.168.4.5---->数据库用户名: admin----->数据库密码:tedu.cn
+
+管理员账号:admin--->密码随便（论坛帐号）--->下一步
+登录时，输入的是论坛的密码
+管理中心：输入的是授权的密码
+模块管理中心：输入的是论坛帐号密码---->论坛
+[root@vh05 ~]# mysql
+MariaDB [(none)]> use  ultrax
+MariaDB [ultrax]> show  tables;
+MariaDB [ultrax]> desc  pre_common_member;
+MariaDB [ultrax]> select  username,email  from  pre_common_member;
++----------+------------------+
+| username | email            |
++----------+------------------+
+| admin    | admin@admin.com  |
+| haha     | 123456789@qq.com |
++----------+------------------+
+
+MariaDB [ultrax]> desc   pre_forum_post;
+MariaDB [ultrax]> select  author,subject,message   from  pre_forum_post;
++--------+----------------+--------------------+
+| author | subject        | message            |
++--------+----------------+--------------------+
+| admin  | hfdbvgewtkhtrj | wml/hahah/zuimei
+ |
++--------+----------------+--------------------+
+
+
+
+
+ipvsadm用法：
+-Ln  查看命令
+-A  添加虚拟服务器
+-t  tcp协议，设置群集地址
+-s  指定负载调度算法    
+
+添加、删除服务器节点：
+-a  添加真实服务器
+-d  删除真实服务器
+-r  指定真实服务器(Real Server)的地址
+-m  使用NAT模式;-g、-i分别对应DR、TUN模式
+-w  为节点服务器设置权重,默认为1
+
+
+配置LVS-NAT模式
+1.在vh08上安装
+[root@vh08 ~]# yum  -y  install   ipvsadm
+
+2、在vh06和vh07 web服务器上把网关指向192.168.4.8
+# nmtui  添加网关
+# ifdown eth0; ifup eth0
+【[root@vh06 html]# nmcli  connection   modify   eth0   ipv4.method   manual  ipv4.gateway   192.168.4.8  connection.autoconnect  yes】
+
+
+3、在vh08的eth2上配置额外的地址201.1.1.8/24
+[root@vh08 ~]# nmtui
+[root@vh08 ~]# systemctl restart NetworkManager
+【[root@vh08 ~]# nmcli connection  add   con-name   eth2  ifname   eth2  type   ethernet 
+[root@vh08 ~]# nmcli   connection   modify   eth2  ipv4.method   manual  ipv4.addresses   201.1.1.8/24  connection.autoconnect  yes
+[root@vh08 ~]# nmcli  connection   up  eth2
+】
+
+4、打开vh08的路由转发功能(RHEL7默认已打开，以前版本需要做以下配置)
+[root@vh08 ~]# vim /etc/sysctl.conf 
+net.ipv4.ip_forward = 1
+[root@vh08 ~]# sysctl -p
+net.ipv4.ip_forward = 1  让内核参数生效
+[root@vh08 ~]# sysctl -a   查看所有的内核参数
+
+
+5.在vh06和vh07上做一个网页
+[root@vh06 html]# vim  index.html
+<html><h1><<font color=red>我想和你一起吃火锅</font></h1></html>
+[root@vh06 html]# systemctl   restart  httpd
+
+[root@vh07 html]# vim  index.html
+<html><h1><font  color=yellow>你是屎吗？黄色的！</font></h1></html>
+[root@vh07 html]# systemctl   restart  httpd
+
+6、lvs集群配置
+(1)创建虚拟服务器，使用tcp的80端口，调度算法是rr
+[root@vh08 ~]# ipvsadm -A -t 201.1.1.8:80 -s rr  不加-s选项默认是wlc
+(2)向VIP中加入RIP
+[root@vh08 ~]# ipvsadm -a -t 201.1.1.8:80 -r 192.168.4.6 -m -w 2
+[root@vh08 ~]# ipvsadm -a -t 201.1.1.8:80 -r 192.168.4.7 -m
+
+
+7、验证
+[root@vh08 ~]# ipvsadm -Ln
+[root@room8pc16 ~]# firefox http://201.1.1.8/bbs
+刷新页面时，按ctrl+f5重新连接服务器
+
+修改调度算法为WRR
+[root@vh08 ~]# ipvsadm -E -t 201.1.1.8:80 -s wrr
+[root@vh08 ~]# ipvsadm  -Ln
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port Scheduler Flags
+  -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
+TCP  201.1.1.8:80 wrr
+  -> 192.168.4.6:80               Masq    2      0          1         
+  -> 192.168.4.7:80               Masq    1      0          1         
+
+
+从规则中移除real server
+[root@vh08 ~]# ipvsadm -d -t 201.1.1.8:80 -r 192.168.4.6
+
+
+[root@vh08 ~]# vim  1.sh
+#!/bin/bash
+RIP1=192.168.4.2
+RIP2=192.168.4.3
+VIP=201.1.1.4:80
+
+while [ 1 ]
+do
+for  IP  in  $RIP1  $RIP2
+do
+     curl  -I  http://${IP} &> /dev/null
+     web_state=$?
+     ipvsadm  -Ln  |  grep  ${IP}  &> /dev/null
+     ip_in_lvs=$?
+     if 
+     [ $web_state  -ne  0  -a  $ip_in_lvs  -eq 0 ]
+     then
+     ipvsadm  -d  -t  $VIP  -r  $IP
+     elif
+     [ $web_state -eq 0  -a   $ip_in_lvs  -ne 0 ]
+     then
+     ipvsadm  -a  -t  $VIP  -r  $IP  -m
+fi
+done
+sleep  3
+done
+[root@vh08 ~]# sh  1.sh &
+
+
+[root@vh06 html]# systemctl   stop  httpd
+[root@vh08 ~]# ipvsadm -Ln
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port Scheduler Flags
+  -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
+TCP  201.1.1.4:80 rr
+  -> 192.168.4.3:80               Masq    1      0          0         
+[root@vh06 html]# systemctl   restart  httpd
+[root@vh08 ~]# ipvsadm -Ln
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port Scheduler Flags
+  -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
+TCP  201.1.1.4:80 rr
+  -> 192.168.4.2:80               Masq    1      0          0         
+  -> 192.168.4.3:80               Masq    1      0          0         
+
+lvs起动状态管理
+[root@vh08 ~]# systemctl   stop   ipvsadm
+[root@vh08 ~]# systemctl   restart   ipvsadm  重起失败，提示执行journalctl -xe，报错日志是/etc/sysconfig/ipvsadm文件不存在，所以要创建它
+查看状态
+[root@vh08 ~]# systemctl   status   ipvsadm  会检查出没有/etc/sysconfig/ipvsadm文件
+[root@vh08 ~]# touch  /etc/sysconfig/ipvsadm  创建文件
+[root@vh08 ~]# ipvsadm   -A  -t  201.1.1.4:80  -s  rr
+[root@vh08 ~]# ipvsadm   -a  -t  201.1.1.4:80   -r  192.168.4.2  -m  -w  2
+[root@vh08 ~]# ipvsadm   -a  -t  201.1.1.4:80   -r  192.168.4.3  -m
+[root@vh08 ~]# ipvsadm   -Ln
+[root@vh08 ~]# systemctl   restart   ipvsadm
+[root@vh08 bin]# systemctl enable ipvsadm
+[root@vh08 ~]# cat  /etc/sysconfig/ipvsadm
+-A -t 201.1.1.4:80 -s rr
+-a -t 201.1.1.4:80 -r 192.168.4.2:80 -m -w 2
+-a -t 201.1.1.4:80 -r 192.168.4.3:80 -m -w 1
+
+
+lvs dr模式：
+一、清理LVS－NAT的配置
+
+1、删除lvs规则
+[root@vh08 bin]# ipvsadm -D -t 201.1.1.8:80
+
+
+2、删除eth2的地址
+[root@vh08 bin]# nmtui  删除地址，将地址获取改为自动
+[root@vh08 bin]# ifdown eth2
+【[root@vh08 ~]# nmcli connection   delete  eth2】
+
+
+二、配置VIP
+1、调度器上配置在vh08的eth0上
+[root@vh08 bin]# cd /etc/sysconfig/network-scripts/
+[root@vh08 bin]# cd /etc/sysconfig/network-scripts/
+[root@vh08 network-scripts]# cp ifcfg-eth0 ifcfg-eth0:0
+[root@vh08 network-scripts]# vim ifcfg-eth0:0
+TYPE=Ethernet
+BOOTPROTO=none
+NAME=eth0:0
+DEVICE=eth0:0
+ONBOOT=yes
+IPADDR=192.168.4.100
+PREFIX=24
+[root@vh08 network-scripts]# ifup eth0:0
+
+
+2、把VIP配置在vh06和vh07两台real server的lo
+[root@vh06 html]# cd /etc/sysconfig/network-scripts/
+[root@vh06 network-scripts]# cp ifcfg-lo ifcfg-lo:0
+[root@vh06 network-scripts]# vim ifcfg-lo:0
+DEVICE=lo:0
+IPADDR=192.168.4.100
+NETMASK=255.255.255.255  如果写成了255.255.255.0将导致该网段其他主机不管理配置192.168.4.0/24网段的哪个地址，都会出现地址冲突
+NETWORK=192.168.4.100
+BROADCAST=192.168.4.100
+ONBOOT=yes
+NAME=lo:0
+[root@vh06 network-scripts]# ifup lo:0
+
+
+三、在WEB服务器上修改内核参数
+
+三台主机都有VIP192.168.4.100。当请求发送过来时，应该是调度器接收请求， real server不要接收。为了实现这个功能，需要修改real server的内核参数。
+[root@vh06 ~]# sysctl -a | grep arp_ig
+[root@vh06 ~]# echo "net.ipv4.conf.all.arp_ignore = 1" >> /etc/sysctl.conf 
+[root@vh06 ~]# echo  "net.ipv4.conf.lo.arp_ignore  = 1"  >>  /etc/sysctl.conf 
+[root@vh06 ~]# sysctl -a | grep arp_ann
+[root@vh06 ~]# echo "net.ipv4.conf.all.arp_announce = 2" >> /etc/sysctl.conf
+[root@vh06 ~]# echo "net.ipv4.conf.lo.arp_announce = 2" >> /etc/sysctl.conf
+[root@vh06 ~]# sysctl -p  应用内核参数
+
+
+四、配置LVS DR规则
+[root@vh08 network-scripts]# ipvsadm -A -t 192.168.4.100:80 
+[root@vh08 network-scripts]# ipvsadm -a -t 192.168.4.100:80 -r 192.168.4.6 -g
+[root@vh08 network-scripts]# ipvsadm -a -t 192.168.4.100:80 -r 192.168.4.7
+
+验证：
+[root@room9pc01 ~]# firefox   192.168.4.100
+[root@room9pc01 ~]# curl   http://192.168.4.100
+<html><h1><font color=red>我想和你一起吃火锅</font></h1></html>
+[root@room9pc01 ~]# curl   http://192.168.4.100
+<html><h1><font  color=yellow>你是屎吗？黄色的！</font></h1></html>
+[root@room9pc01 ~]# curl   http://192.168.4.100
+<html><h1><font color=red>我想和你一起吃火锅</font></h1></html>
+ 
+
+[root@vh08 network-scripts]# ipvsadm  -Ln
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port Scheduler Flags
+  -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
+TCP  192.168.4.100:80 wlc
+  -> 192.168.4.6:80               Route   1      0          10        
+  -> 192.168.4.7:80               Route   1      0          11        
+
+
+
+
+
+
+
+
+
+
+
+
+
+

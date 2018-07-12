@@ -1,0 +1,134 @@
+云：一种形象的说法，本质是按使用付费
+
+Iaas：基础架构即服务，最终提供云主机
+Pass：平台即服务
+Saas：软件即服务
+
+CPU: AMD K62-500  500MHz
+HDD: 10GB
+Memory: 64M   8M
+
+摩尔定律
+虚拟化：vmware -> vSphere(esxi)  redhat ->RHEV
+Iaas：
+
+一、准备虚拟机
+1、vh01.tedu.cn 192.168.4.1 提供DNS和NTP
+2、vh02.tedu.cn
+192.168.4.2/24  192.168.2.2/24
+提供额外的硬盘，作为openstack的云硬盘
+DNS指向192.168.4.1
+3、关闭SELILNUX和防火墙
+二、准备yum
+1、挂载光盘
+
+三、在vh01.tedu.cn配置DNS
+1、安装
+[root@vh01 ~]# yum install -y bind
+2、修改主配置文件
+[root@vh01 ~]# vim /etc/named.conf 
+        listen-on port 53 { any; };
+        allow-query     { any; };
+
+3、声明要解析的域
+[root@vh01 ~]# vim /etc/named.rfc1912.zones 
+zone "tedu.cn" IN {
+        type master;
+        file "tedu.cn.zone";
+        allow-update { none; };
+};
+4、创建区配置文件
+[root@vh01 ~]# vim /var/named/tedu.cn.zone
+$TTL    86400
+@       IN      SOA     vh01.tedu.cn.   root.tedu.cn. (
+                                20170901
+                                3H
+                                15M
+                                1W
+                                1D )
+        IN      NS      vh01.tedu.cn.
+$generate       1-9     vh0$    IN      A       192.168.4.$
+$generate       10-254  vh$     IN      A       192.168.4.$
+5、修改权限
+[root@vh01 ~]# chmod 640 /var/named/tedu.cn.zone 
+[root@vh01 ~]# chgrp named /var/named/tedu.cn.zone
+6、起动服务并验证
+[root@vh01 ~]# nslookup vh100.tedu.cn
+
+NTP：网络时间协议  UDP123
+1、安装
+[root@vh01 ~]# yum install -y ntp
+2、配置
+[root@vh01 ~]# vim /etc/ntp.conf 
+restrict 192.168.4.0 mask 255.255.255.0 nomodify
+#server 0.rhel.pool.ntp.org iburst
+#server 1.rhel.pool.ntp.org iburst
+#server 2.rhel.pool.ntp.org iburst
+#server 3.rhel.pool.ntp.org iburst
+server 127.127.1.0 iburst
+fudge 127.127.1.0 stratum 3
+3、起动服务并验证
+[root@vh01 ~]# systemctl start ntpd; systemctl enable ntpd
+[root@vh01 ~]# netstat -ulnp | grep :123
+[root@vh02 ~]# date -s '2017-09-21 12:00:00'
+[root@vh02 ~]# ntpdate 192.168.4.1
+[root@vh02 ~]# date
+
+安装openstack
+1、配置IP地址：192.168.4.2/24  192.168.2.2/24
+2、关闭NetworkManager
+3、保证yum可用
+3、创建卷组
+[root@vh02 ~]# pvcreate /dev/vdb
+[root@vh02 ~]# vgcreate cinder-volumes /dev/vdb
+4、导入rabbitmq的密钥
+[root@vh02 openstack]# rpm --import rabbitmq-signing-key-public.asc 
+5、安装依赖包
+[root@vh02 openstack]# yum install -y rpms/*rpm
+6、安装部署工具packstack
+[root@vh02 ~]# yum install -y openstack-packstack
+7、生成应答文件，如果DNS有误则无法生成
+[root@vh02 ~]# packstack --gen-answer-file answer.txt
+8、修改应答文件
+[root@vh02 ~]# vim answer.txt
+CONFIG_DEFAULT_PASSWORD=redhat
+CONFIG_SWIFT_INSTALL=n
+CONFIG_NTP_SERVERS=192.168.4.1
+CONFIG_COMPUTE_HOSTS=192.168.4.2
+CONFIG_KEYSTONE_ADMIN_PW=redhat
+CONFIG_CINDER_VOLUMES_CREATE=n
+CONFIG_NEUTRON_ML2_VXLAN_GROUP=239.1.1.2
+CONFIG_NEUTRON_ML2_VNI_RANGES=1001:2000
+CONFIG_NEUTRON_OVS_BRIDGE_MAPPINGS=physnet1:br-ex
+CONFIG_NEUTRON_OVS_TUNNEL_IF=eth1
+CONFIG_PROVISION_DEMO=n
+9、安装openstack
+[root@vh02 ~]# packstack --answer-file answer.txt
+
+配置OVS
+1、配置br-ex为网桥，将IP地址加到br-ex
+[root@vh02 ~]# cd /etc/sysconfig/network-scripts/
+[root@vh02 network-scripts]# cp ifcfg-eth0 ifcfg-br-ex
+[root@vh02 network-scripts]# vim ifcfg-br-ex
+TYPE=OVSBridge
+DEVICETYPE=ovs
+BOOTPROTO=none
+NAME=br-ex
+DEVICE=br-ex
+ONBOOT=yes
+IPADDR=192.168.4.2
+PREFIX=24
+DNS1=192.168.4.1
+2、将eth0作为br-ex的端口
+[root@vh02 network-scripts]# vim ifcfg-eth0
+TYPE=OVSPort
+DEVICETYPE=ovs
+OVS_BRIDGE=br-ex
+NAME=eth0
+DEVICE=eth0
+ONBOOT=yes
+[root@vh02 network-scripts]# systemctl restart network  或
+[root@vh02 network-scripts]# ifdown eth0; ifup eth0
+[root@vh02 network-scripts]# ifdown br-ex; ifup br-ex
+
+

@@ -1,0 +1,97 @@
+1 、安装 6 台虚拟机
+
+1.1  禁用 selinux
+       卸载 firewalld
+
+其中 4 台初始化
+
+1.2  要求 hostname 必须能 ping 通
+1.3  安装软件  openjdk openjdk-devel  版本 1.8
+        java -version
+        jps
+
+1.4  安装 hadoop 软件  (只装一台)
+       hadoop 路径： /usr/local/hadoop
+
+1.5 测试 hadoop
+配置 /usr/local/hadoop/etc/hadoop/hadoop-env.sh
+export JAVA_HOME="/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.65-3.b17.el7.x86_64/jre"
+export HADOOP_CONF_DIR="/usr/local/hadoop/etc/hadoop"
+
+cd /usr/local/hadoop
+./bin/hadoop version 
+
+创建文件夹，放入需要统计的文件文本
+mkdir  input
+cp  *.txt  input/
+
+统计热词
+bin/hadoop jar share/hadoop/mapreduce/hadoop-mapreduce-examples-2.7.3.jar wordcount input output
+
+完全分布式配置
+路径全部都在   /usr/local/hadoop/etc/hadoop
+配置文件格式   xml  格式
+    <property>
+        <name>关键字</name>
+        <value>变量值</value>
+        <description> 描述 </description>
+    </property>
+
+1  Hadoop-env.sh
+JAVA_HOME
+HADOOP_CONF_DIR
+
+2  core-site.xml
+fs.defaultFS
+hdfs://namenode.ip:port/
+
+hadoop.tmp.dir
+/var/hadoop
+
+3  hdfs-site.xml
+dfs.replication
+2
+dfs.namenode.http-address
+namnode.ip:50070
+dfs.namenode.secondary.http-address
+secondary.namenode.ip:50090
+
+4  mapreduce-site.xml
+mapreduce.framework.name
+yarn
+
+5  yarn-site.xml
+yarn.resourcemanager.hostname
+resourcemanager主机名
+
+yarn.nodemanager.aux-services
+mapreduce_shuffle
+
+6  slaves
+声明 datanode 主机的名字
+
+#-------------------------------------------------------------------------------------------#
+    主机名                          IP                                     角色
+   nn01                   192.168.4.10     namenode, secondarynamenode
+   node1                 192.168.4.11     datanode
+   node2                 192.168.4.12     datanode
+   node3                 192.168.4.13     datanode
+#-------------------------------------------------------------------------------------------#
+1  配置  /etc/hosts  (4 台机器全部都要配置)
+2  安装  openjdk openjdk-devel  版本 1.8
+3  配置  ssh 免密码登录，要求 从 namenode 到所有主机不需要输入密码，包括自己，不能出现要求输入 yes 的情况
+4  配置 hdfs 集群
+    hadoop-env.sh
+    core-site.xml
+    hdfs-site.xml
+    slaves
+5  拷贝 /usr/local/hadoop 到其他主机上
+6  创建 hadoop.tmp.dir 指定的目录
+7  格式化集群文件系统  /usr/local/hadoop
+    ./bin/hdfs namenode -format
+8  启动集群
+    ./sbin/start-dfs.sh
+
+9  验证
+    jps
+    ./bin/hdfs dfsadmin -report

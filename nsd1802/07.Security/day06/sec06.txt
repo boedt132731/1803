@@ -1,0 +1,77 @@
+LNMP
+nginx
+mariadb mariadb-server mariadb-devel
+php php-mysql php-fpm
+
+zabbix
+./configure --enable-server --enable-proxy --enable=agent --with-mysql=/usr/bin/mysql_config --with-net-snmp --with-libcurl
+
+make && make install
+
+useradd -s /sbin/nologin zabbix
+vim /usr/local/etc/zabbix_server.conf
+DBHost=localhost
+DBName=zabbix
+DBUser=zabbix
+DBPassword=zabbix
+启动
+zabbix_server
+
+vim /usr/local/etc/zabbix_agentd.conf
+Server=127.0.0.1,192.168.2.5
+ServerActive=127.0.0.1,192.168.2.5
+Hostname=zabbixclient_web1
+UnsafeUserParameter=1
+EnableRemoteCommand=1
+Include=/usr/local/zabbix_agentd.d/
+
+zabbix_agend
+
+cp frontend/php/* /usr/local/nginx/html
+chmod 777 /usr/local/nginx/html/* -R
+firefox http://192.168.2.5/index.php
+php-gd php-xml php-mbstring php-bcmath
+/etc/php.ini 
+
+配置--主机
+
+自定义key
+cd /usr/local/zabbix_agentd.d/
+vim user.num
+UserParameter=key,cmd
+
+===============================
+查看服务是否启动：
+ps -e|grep nginx
+ps -e|grep php
+ps -e|grep mysql
+ps -e|grep zabbix
+
+
+触发器状态：
+problem
+ok
+
+创建自动发现的动作
+条件：
+自动发现规则=
+服务类型=
+自动发现状态=
+
+ss -natp|awk '$1=="TIME-WAIT"{x++}END{print x}'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

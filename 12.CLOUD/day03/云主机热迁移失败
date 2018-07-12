@@ -1,0 +1,2 @@
+1、云主机热迁移失败首先看/etc/hosts,保证一样能ping通
+2、可能是kvm-rhel-env包没有安装

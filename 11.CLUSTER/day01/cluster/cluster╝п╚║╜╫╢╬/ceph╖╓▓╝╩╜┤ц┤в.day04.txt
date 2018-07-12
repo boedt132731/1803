@@ -1,0 +1,459 @@
+
+
+ceph概述
+
+什么是分布式文件系统?
+	分布式文件系统(Distributed File System)是指文件系统管理的物理存储资源不一定直接连接在本地节点上,而是通过计算机网络与节点相连
+	分布式文件系统的设计基于客户机/服务器模式
+
+
+常用分布式文件系统：
+	Lustre
+	Hadoop
+	FastDFS
+	Ceph
+	GlusterFS
+
+什么是ceph？
+	ceph是一个分布式文件系统
+	具有高扩展、高可用、高性能的特点
+	ceph可以提供对象存储、块存储、文件系统存储
+	ceph可以提供PB级别的存储空间(PBàTBàGB)
+		1024G*1024G=1048576G
+	软件定义存储(Software Defined Storage)作为存储行业的一大发展趋势,已经越来越受到市场的认可
+
+块存储： iscsi  
+文件存储： NFS/SAMBA
+对象存储： 都是C/S结构，客户端需要单独安装软件
+
+
+ceph组件：
+	OSDs：存储设备，ceph对象存储设备，它是唯一的真正存储数据的设备，只由OSD存储设备，它是一个进程，一般来说OSD关联到集群中的每块物理硬盘，所以集群中由多少块硬盘就有多少个OSD进程
+	Monitors（MON）：集群监控组件，ceph通过一系列的映射表来监控集群状态，一般来说MON是奇数个
+	MDSs：存放文件系统的元数据服务器(对象存储和块存储不需要该组件)，元数据是描述数据的数据，MDS为cephFS维护文件系统结构，存储元数据
+Client：ceph客户端，需要单独安装组件
+
+
+Ceph块存储
+
+什么是块存储
+	单机块设备：光盘，磁盘
+	分布式块存储：Ceph，Cinder
+	Ceph块设备也叫做RADOS块设备：RADOS block device:RBD
+	RBD驱动已经很好的集成在了Linux内核中
+	RBD提供了企业功能,如快照、COW克隆等等
+	RBD还支持内存缓存,从而能够大大提高性能
+	Linux内核可用直接访问Ceph块存储
+	KVM可用借助于librbd访问
+
+
+
+部署ceph集群
+
+一，准备6台虚拟机
+1.初始化
+node1.tedu.cn  192.168.4.11
+node2.tedu.cn  192.168.4.12
+node3.tedu.cn  192.168.4.13
+node4.tedu.cn  192.168.4.14
+node5.tedu.cn  192.168.4.15
+client.tedu.cn  192.168.4.10
+
+2.将ceph光盘挂载到物理主机，以便将其作为yum源
+2.1创建工作目录
+在client上配置yum源
+[root@client ~]# yum  -y install  httpd
+[root@client ~]# systemctl  restart  httpd
+[root@client ~]# systemctl  enable  httpd
+[root@client ~]# mkdir  /var/www/html/ceph
+
+2.2永久将光盘挂载到工作目录
+[root@room9pc01 ~]# scp  -r  ceph挂载镜像目录/*  192.168.4.10:/var/www/html/ceph
+[root@room9pc01 ~]# scp  -r  cluster相关软件/ceph/rhcs2.0-rhosp9-20161113-x86_64.iso  192.168.4.10:/root
+
+
+[root@client ~]# vim  /etc/fstab
+/root/rhcs2.0-rhosp9-20161113-x86_64.iso   /var/www/html/ceph  iso9660   defaults  0 0
+[root@client ~]# mount  -a
+再修改client的yum源，本地http://var/www/html/ceph
+
+2.3yum源需要系统和ceph光盘两个源，注意：ceph光盘/var/www/html/ceph/rhceph-2.0-rhel-7-x86_64/目录
+4.10作为客户端yum源
+
+[root@node1 ~]# vim  /etc/yum.repos.d/dvd.repo
+
+[dvd]
+name=123
+baseurl=http://192.168.4.254/xixi  真机yum源
+enable=1
+gpgcheck=0
+
+以下全部是4.10作为客户端yum源
+[mon]
+name=mon
+baseurl=http://192.168.4.10/ceph/rhceph-2.0-rhel-7-x86_64/MON
+enable=1
+gpgcheck=0
+
+[osd]
+name=osd
+baseurl=http://192.168.4.10/ceph/rhceph-2.0-rhel-7-x86_64/OSD
+enable=1
+gpgcheck=0
+
+
+[Tools]
+name=Tools
+baseurl=http://192.168.4.10/ceph/rhceph-2.0-rhel-7-x86_64/Tools
+enable=1
+gpgcheck=0
+
+
+[root@node1 ~]# for  i  in  {10..15}
+> do
+> scp  /etc/yum.repos.d/dvd.repo  192.168.4.$i:/etc/yum.repos.d/
+> done
+
+3.将node1作为管理节点，为其生成SSH密钥，可以免密登录其他节点
+
+[root@node1 ~]# ssh-keygen -f /root/.ssh/id_rsa  -N  ''
+[root@node1 ~]# for  i  in {10..15}
+> do
+> ssh-copy-id  192.168.4.$i
+> done
+
+4.通过hosts文件配置名称解析
+只写进本机的循环
+[root@node1 ~]# for  i  in  {1..5}
+> do
+> echo -e  "192.168.4.1$i\tnode$i.tedu.cn\tnode$i"  >>  /etc/hosts
+> done
+
+
+[root@node1 ~]# echo  -e  "192.168.4.10\tclient.tedu.cn\tclient"  >>  /etc/hosts
+
+
+[root@node1 ~]# for  i  in  {10..15}
+> do
+> scp  /etc/hosts  192.168.4.$i:/etc/
+> done
+
+53.配置192.168.4.10为NTP服务器
+[root@client ~]# yum  -y   install   chrony
+[root@client ~]# vim  /etc/chrony.conf 
+#server 0.rhel.pool.ntp.org iburst
+#server 1.rhel.pool.ntp.org iburst
+#server 2.rhel.pool.ntp.org iburst
+server 3.rhel.pool.ntp.org iburst
+26 allow 192.168.4.0/24
+29 local stratum 10  第几层的时间服务器
+
+[root@client ~]# systemctl   restart   chronyd
+
+6.配置node1--node5 为NTP客户端
+
+
+[root@client ~]# for  i  in  {1..5}
+> do
+> ssh  node$i  yum  -y  install  chrony
+> done
+
+[root@node1 ~]# vim  /etc/chrony.conf 
+server 192.168.4.10 iburst
+[root@node1 ~]# systemctl   restart   chronyd
+
+[root@node1 ~]# for  i  in  {2..5}
+> do
+> scp  /etc/chrony.conf   node$i:/etc/
+> done
+
+[root@node1 ~]# for  i  in  {2..5}
+> do
+> ssh  node$i  systemctl  restart  chronyd
+> done
+
+
+7.node1/node2/node3为共享存储提供硬盘，每个节点加三个硬盘，每个硬盘大小10GB 
+8.在node1上安装ceph管理软件ceph-deploy
+[root@node1 ~]# yum  -y  install   ceph-deploy
+
+9.创建ceph-deploy的工作目录
+[root@node1 ~]# mkdir  ceph-cluster
+[root@node1 ~]# cd  ceph-cluster
+
+
+生成管理集群的配置文件和密钥文件
+[root@node1 ceph-cluster]# ceph-deploy  new  node{1,2,3}
+[root@node1 ceph-cluster]# ls
+ceph.conf  ceph-deploy-ceph.log  ceph.mon.keyring
+
+为所有节点安装ceph软件包
+[root@node1 ceph-cluster]# ceph-deploy  install  node{1,2,3}
+
+10.初始化mon服务（主机名解析必须对）
+[root@node1 ceph-cluster]# ceph-deploy  mon  create-initial
+这里没有指定主机,是因为第一步创建的配置文件中已经有了,所以要求主机名解析必须对,否则连接不到对应的主机
+
+11.为所有节点准备磁盘分区，用来做存储服务器的日志盘
+[root@node1 ceph-cluster]# for  i  in  {1..3}
+> do
+> ssh  node$i  parted  /dev/vdb  mklabel  gpt
+> ssh  node$i  parted  /dev/vdb  mkpart  primary  1M  50%
+> ssh  node$i  parted  /dev/vdb  mkpart  primary  50%  100%
+> done
+
+[root@node1 ceph-cluster]# for  i  in  {1..3}
+> do
+> ssh  node$i  lsblk
+> done
+
+[root@node1 ceph-cluster]# for  i  in  {1..3} 属主属组必须是ceph
+> do
+> ssh  node$i  chown   ceph.ceph   /dev/vdb1
+> ssh  node$i  chown   ceph.ceph   /dev/vdb2
+> done
+[root@node1 ceph-cluster]# for  i  in  {1..3}
+> do
+> ssh  node$i   ls  -lh  /dev/vdb?
+> done
+
+
+[root@node1 ceph-cluster]# ls  -ld  /dev/vdb?
+brw-rw----. 1 ceph ceph 252, 17 5月  21 14:54 /dev/vdb1
+brw-rw----. 1 ceph ceph 252, 18 5月  21 14:54 /dev/vdb2
+这两个分区用来做存储服务器的日志journal盘
+
+
+12.配置OSD，初始化磁盘
+[root@node1 ceph-cluster]# for  i   in  {1..3}
+> do
+> ceph-deploy   disk zap  node$i:vdc  node$i:vdd
+> done
+
+
+13.创建OSD存储空间，在node1上做
+[root@node1 ceph-cluster]# for  i  in  {1..3}
+> do
+> ceph-deploy  osd  create  node$i:vdc:/dev/vdb1  node$i:vdd:/dev/vdb2
+> done
+
+
+14.查看ceph状态
+[root@node1 ceph-cluster]# ceph  -s
+cluster 7e157181-1c02-4607-92f4-38ee9e36ca54
+     health HEALTH_OK
+
+如果正常的话，可以看到health  HEALTH_OK
+如果是HEALTH_ERR，可以重启服务
+[root@node1 ceph-cluster]# for  i  in  {1..3}
+> do
+> ssh  node$i  systemctl  restart  ceph\*.service  ceph\*.target
+> done
+在所有节点,或仅在失败的节点重启服务
+
+可能出现的错误
+osd create创建OSD存储空间,如提示run  'gatherkeys’
+[root@node1	~]#  ceph-deploy  gatherkeys  node1  node2  node3		
+
+排错：如果ceph节点关机重启，/dev/vdb1,/dev/vdb2属主属组又变成了root：disk，ceph-osd\*服务就起不来，可以先chown  ceph：ceph  /dev/vdb1，chown  ceph：ceph  /dev/vdb2，然后systemctl  start  ceph-osd\*，将有报错信息，最后一行提示先执行systemctl  reset  XXX，再执行systemctl  start  ceph-osd\*,
+重启系统，还希望vdb1/vdb2属主是ceph，则
+[root@node1 ceph-cluster]# vim   /etc/udev/rules.d/10-chowndis.rules
+ACTION=="add",KERNEL=="vdb[12]",OWNER="ceph",GROUP="ceph"
+
+
+
+使用ceph块设备
+
+1.块设备存在于存储池中，默认ceph集群已有有一个名为rdb池
+[root@node1 ceph-cluster]#  ceph  osd  lspools
+0 rbd,
+
+2.在默认池里创建一个名为demo-image的镜像，镜像可以当成远程主机的硬盘
+[root@node1 ceph-cluster]# rbd  create  demo-image  --image-feature  layering --size  10G
+
+3.指定在rdb池中创建一个名为image镜像
+[root@node1 ceph-cluster]# rbd create  rbd/image --image-feature  layering --size  10G 
+
+4.查看镜像信息
+[root@node1 ceph-cluster]# rbd  ls
+demo-image
+image
+
+[root@node1 ceph-cluster]# rbd  info  image
+rbd image 'image':
+	size 10240 MB in 2560 objects
+	order 22 (4096 kB objects)
+	block_name_prefix: rbd_data.16fa0238e1f29
+	format: 2
+	features: layering
+	flags: 
+
+
+5.缩减/增容镜像
+[root@node1 ceph-cluster]# rbd  resize  --size  7G  image --allow-shrink  缩小镜像
+[root@node1 ceph-cluster]# rbd  info  image
+rbd image 'image':
+	size 7168 MB in 1792 objects
+	order 22 (4096 kB objects)
+	block_name_prefix: rbd_data.16fa0238e1f29
+	format: 2
+	features: layering
+	flags: 
+
+[root@node1 ceph-cluster]# rbd  resize  --size  15G image  增大镜像
+[root@node1 ceph-cluster]# rbd  info  image
+rbd image 'image':
+	size 15360 MB in 3840 objects
+	order 22 (4096 kB objects)
+	block_name_prefix: rbd_data.16fa0238e1f29
+	format: 2
+	features: layering
+	flags: 
+
+
+6.如果需要使用ceph的块存储，那么首先要把ceph镜像映射到本地
+[root@node1 ceph-cluster]# lsblk    此时还没有ceph存储
+[root@node1 ceph-cluster]# rbd map demo-image
+/dev/rbd0
+[root@node1 ceph-cluster]# lsblk    此时多了一个10GB的/dev/rbd0
+rbd0          251:0    0   10G  0 disk 
+[root@node1 ceph-cluster]# mkfs.xfs /dev/rbd0 
+[root@node1 ceph-cluster]# mount /dev/rbd0 /mnt/
+[root@node1 ceph-cluster]# df -h /mnt/
+文件系统        容量  已用  可用 已用% 挂载点
+/dev/rbd0        10G   33M   10G    1% /mnt
+[root@node1 ceph-cluster]# cp /etc/hosts /mnt/   此步骤只是测试共享存储可用
+[root@node1 ceph-cluster]# cat /mnt/hosts 
+
+配置ceph客户端
+
+1、安装软件包
+[root@client ~]# yum install -y ceph-common
+
+2、为了让客户端能够找到集群，需要集群配置文件
+[root@node1 ceph-cluster]# scp /etc/ceph/ceph.conf 192.168.4.10:/etc/ceph/
+
+
+3、客户端访问集群，需要授权，可以为客户端创建用户，也可以使用默认创建的admin帐户
+[root@node1 ceph-cluster]# scp /etc/ceph/ceph.client.admin.keyring 192.168.4.10:/etc/ceph/
+
+
+4、使用ceph块设备
+[root@client ~]# rbd ls
+demo-image
+image
+
+[root@client ~]# rbd map image 
+/dev/rbd0
+[root@client ceph]# lsblk 
+loop0           7:0    0 935.4M  0 loop /var/www/html/ceph
+
+[root@client ~]# mkfs.xfs /dev/rbd0
+[root@client ~]# rbd showmapped    查看ceph块设备信息
+id pool image snap device    
+0  rbd  image -    /dev/rbd0 
+
+[root@client ~]# mount /dev/rbd0 /mnt/
+[root@client ~]# echo 'Hello ceph' > /mnt/mytest.txt  # 只是测试
+
+查看ceph存储的大小
+[root@node1 ceph-cluster]# rados df
+
+管理快照
+快照：某一状态点的镜像，将来有任何误操作，都可以通过还原快照来恢复
+
+1、查看image的快照
+[root@client ~]# rbd snap ls image
+
+2、为image创建名为image-snap1的快照
+[root@client ~]# rbd snap create image --snap image-snap1
+[root@client ~]# rbd snap ls image
+SNAPID NAME            SIZE 
+     4 image-snap1 15360 MB 
+
+快照使用COW技术,对大数据快照速度会很快!
+
+3、模拟误删除操作
+（1）删除文件
+[root@client ~]# cat /mnt/mytest.txt 
+Hello ceph
+[root@client ~]# rm -f /mnt/mytest.txt
+
+（2）卸载存储并还原快照
+[root@client ~]# umount /mnt/
+[root@client ~]# rbd snap rollback image --snap image-snap1
+
+（3）挂载存储，检查数据是否恢复
+[root@client ~]# mount /dev/rbd0 /mnt/
+[root@client ~]# ll /mnt/
+[root@client ~]# cat /mnt/mytest.txt 
+
+克隆镜像
+如果想从快照恢复出来一个新的镜像,则可以使用克隆
+注意,克隆前,需要对快照进行<保护>操作
+被保护的快照无法删除,取消保护(unprotect)
+
+1、通过快照进行镜像克隆，首先保护快照
+[root@client ~]# rbd snap protect image --snap image-snap1
+
+2、创建名为image-clone的克隆镜像
+[root@client ~]# rbd clone image --snap image-snap1 image-clone --image-feature layering
+
+3、查看克隆镜像与父镜像关系
+[root@client ~]# rbd  info image-clone
+rbd image 'image-clone':
+	size 15360 MB in 3840 objects
+	order 22 (4096 kB objects)
+	block_name_prefix: rbd_data.1218d238e1f29
+	format: 2
+	features: layering
+	flags: 
+	parent: rbd/image@image-snap1
+	overlap: 15360 MB
+
+
+4、合并克隆镜像，使之成为一个整体
+克隆镜像很多数据都来自于快照链
+如果希望克隆镜像可以独立工作,就需要将父快照中的数据,全部拷贝一份,但比较耗时!!!
+[root@client ~]# rbd flatten image-clone
+[root@client ~]# rbd  info image-clone   已经没有父镜像了
+rbd image 'image-clone':
+	size 15360 MB in 3840 objects
+	order 22 (4096 kB objects)
+	block_name_prefix: rbd_data.1218d238e1f29
+	format: 2
+	features: layering
+	flags: 
+
+
+删除操作
+
+1、取消RBD映射
+[root@client ~]# umount /mnt/
+[root@client ~]# rbd unmap /dev/rbd/rbd/image 
+[root@client ~]# lsblk   没有rbd0了
+NAME          MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
+sr0            11:0    1  1024M  0 rom  
+vda           252:0    0    20G  0 disk 
+├─vda1        252:1    0     1G  0 part /boot
+└─vda2        252:2    0    19G  0 part 
+  ├─rhel-root 253:0    0    17G  0 lvm  /
+  └─rhel-swap 253:1    0     2G  0 lvm  [SWAP]
+loop0           7:0    0 935.4M  0 loop /var/www/html/ceph
+
+2、删除快照
+[root@client ~]# rbd snap unprotect image --snap image-snap1  取消保护
+[root@client ~]# rbd snap rm image --snap image-snap1
+
+3、删除镜像
+[root@client ~]# rbd list
+demo-image
+image
+image-clone
+[root@client ~]# rbd rm image
+[root@node1 ceph-cluster]# rbd list
+demo-image
+image-clone
+
+
+

@@ -1,0 +1,135 @@
+chage -l
+chage -d 0
+chage -E 
+passwd -l 
+passwd -u
+passwd -S 
+
+chattr +i
+chattr +a
+
+/etc/issue
+
+su - 用户名 -c "命令"
+su - root
+
+sudo 
+/etc/sudoers
+用户名	ALL=(ALL)  命令 
+
+ssh 
+ssh key
+
+client        server
+ssh-keygen 
+ssh-copy-id root@server
+
+AllowUsers  lisi zhangsan@201.1.2.10
+
+selinux
+getenforce
+/etc/sysconfig/selinux
+ls -Z
+cp /etc/hosts /var/ftp/
+mv /root/1.txt /var/ftp
+chcon -t 
+
+安装ftp客户的
+yum install ftp
+
+查看ip地址
+ip a ls dev eth0
+
+
+ftp 201.1.2.200
+用户名：ftp
+密码：
+ftp>cd upload -------- /var/ftp/upload  
+				 chown ftp:ftp /var/ftp/upload
+ftp> lcd /etc
+ftp> put passwd
+ftp> ls
+
+getsebool -a|grep ftp
+ftpd_anon_write --> off
+ftpd_full_access --> off
+
+[root@vpn upload]# setsebool ftpd_anon_write on
+[root@vpn upload]# setsebool -P ftpd_full_access 1
+
+3种加密方式
+1. 对称加密
+gpg -c file1
+gpg -d file1.gpg
+
+2.非对称加密
+gpg --gen-key
+
+产生更多的随机数
+rngd -r /dev/urandom
+
+gpg --list-keys
+
+rm -fr /root/.gnupg
+
+gpg -a --export 密钥表识(邮箱userA@123.com) > /tmp/userA.pub
+
+scp /tmp/userA.pub IP:/tmp
+IP:
+gpg --import /tmp/userA.pub
+gpg --list-keys
+gpg -e -r userA@123.com love.txt
+scp love.txt.gpg 
+
+gpg -d love.txt.gpg > love.txt
+
+3.hash
+校验数据的完整性
+
+
+数字签名：
+client端：
+rm -fr .gnupg/
+gpg --gen-key
+reset
+gpg --list-keys
+gpg -b log.tar.gz 
+gpg -a --export userB > /tmp/userB.pub
+scp /tmp/userB.pub 192.168.4.5:/tmp/
+scp log.tar.gz* 192.168.4.5:/root
+
+svr5端：
+rm -fr .gnupg/
+gpg --import /tmp/userB.pub 
+gpg --list-key
+gpg --verify log.tar.gz.sig log.tar.gz
+
+
+入侵检测系统
+yum install aide
+vim /etc/aide.conf
+/root NORMAL
+初始化数据库：
+aide --init
+
+备份数据库文件
+cp  /var/lib/aide/aide.db.gz /media
+
+恢复数据库文件：
+cp /media/aide.db.new.gz /var/lib/aide/aide.db.gz 
+
+进行入侵检测
+aide --check
+
+
+
+
+
+
+
+
+
+
+
+
+

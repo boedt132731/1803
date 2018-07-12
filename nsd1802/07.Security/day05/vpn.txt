@@ -1,0 +1,67 @@
+pptpd
+1. 安装软件
+yum localinstall pptpd-1.4.0-2.el7.x86_64.rpm
+
+2. 修改配在文件
+vim /etc/pptpd.conf
+localip 201.1.2.5 
+remoteip 192.168.3.1-50 
+ 
+vim /etc/ppp/options.pptpd
+ms-dns 8.8.8.8 
+
+vim /etc/ppp/chap-secrets 
+test1 * 123456 *
+
+3.启动服务
+systemctl start pptpd
+
+4. 客户端配置(windows)
+
+5. 测试
+在windows端
+ping 201.1.2.5
+ping 192.168.4.5
+
+二 l2tp+ipsec
+1. 安装软件
+yum -y install libreswan
+
+2. 创建配置文件
+创建配置文件/etc/ipsec.d/myipsec.conf
+left
+
+3.创建预共享密钥
+[root@vpn ipsec.d]# pwd
+/etc/ipsec.d
+[root@vpn ipsec.d]# cat myipsec.secrets 
+201.1.2.200 %any: PSK "pass123"
+
+4. 启动服务
+systemctl start ipsec
+5. 查看服务
+ss -naptu|grep pluto
+
+l2tp部分
+1. 安装：
+yum install xl2tpd-1.3.8-2.el7.x86_64.rpm
+
+2. vim /etc/xl2tpd/xl2tpd.conf
+ip range = 192.168.3.128-192.168.3.254
+local ip = 201.1.2.200
+
+3. 认证有关
+/etc/ppp/options.xl2tpd
+#crtscts
+#lock
+require-mschap-v2
+
+/etc/ppp/chap-secrets
+test	*	123123	*
+
+4. 启动服务
+systemctl start xl2tpd
+ss -antpu|grep xl2tpd
+
+
+

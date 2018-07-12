@@ -1,0 +1,271 @@
+
+
+CephFS:分布式文件系统
+
+什么是CephFS：
+	分布式文件系统(Distributed File System)是指文件系统管理的物理存储资源不一定直接连接在本地节点上,而是通过计算机网络与节点相连
+	CephFS使用Ceph集群提供与POSIX兼容的文件系统
+	允许Linux直接将Ceph存储mount到本地
+
+
+元数据服务器
+
+什么是元数据
+元数据(Metadata)：
+	任何文件系统中的数据分为数据和元数据。
+	数据是指普通文件中的实际数据
+	而元数据指用来描述一个文件的特征的系统数据
+	比如:访问权限、文件拥有者以及文件数据块的分布信息(inode...)等
+所以CephFS必须有MDSs节点
+
+
+
+ceph对象存储
+
+什么是对象存储
+对象存储：
+	也就是键值存储,通其接口指令,也就是简单的GET、PUT、DEL和其他扩展,向存储服务上传下载数据
+	对象存储中所有数据都被认为是一个对象,所以,任何数据都可以存入对象存储服务器,如图片、视频、音频等
+RGW全称是Rados Gateway
+RGW是Ceph对象存储网关,用于向客户端应用呈现存储界面,提供RESTful API访问接口
+
+
+
+
+
+ceph实战：创建KVM虚拟机，虚拟的硬盘使用ceph存储
+
+1.在ceph上远程服务器创建镜像
+[root@node1 ceph-cluster]# rbd  create  vm1-image  --image-feature  layering --size  10G      vm1-image是池里镜像的名
+[root@node1 ceph-cluster]# rbd  create  vm2-image  --image-feature  layering --size  10G
+[root@node1 ceph-cluster]# rbd  list
+vm1-image
+vm2-image
+
+2.查看
+[root@node1 ceph-cluster]# qemu-img   info  rbd:rbd/vm1-image
+image: rbd:rbd/vm1-image
+file format: raw
+virtual size: 10G (10737418240 bytes)
+disk size: unavailable
+
+3.将物理主机作为ceph客户端
+[root@room9pc01 ~]# yum  -y  install   ceph-common
+[root@node1 ceph-cluster]# scp  /etc/ceph/ceph.conf   192.168.4.254:/etc/ceph/
+[root@node1 ceph-cluster]# scp  /etc/ceph/ceph.client.admin.keyring  192.168.4.254:/etc/ceph/
+
+4.正常创建一台虚拟机，点击完成时，虚拟机将会运行起来，此时强制关闭虚拟机
+5.把虚拟机的配置生成配置文件
+[root@room9pc01 ~]# virsh   dumpxml  vm1  >  /tmp/vm1.xml
+[root@room9pc01 ~]# cat  /tmp/vm1.xml
+
+6.删除虚拟机vm1，以后再通过修改的vm1.xml生成虚拟机vm1
+7.虚拟机使用ceph存储，需要有个“通行证”，编写xml文件，形成通行证
+[root@room9pc01 ~]# vim  /tmp/secret.xml
+<secret ephemeral='no'  private='no'>
+        <usage  type='ceph'>
+                <name>client.admin  secret</name>
+        </usage>
+</secret>
+
+生成UUID
+[root@room9pc01 ~]# virsh   secret-define  /tmp/secret.xml 
+生成 secret 51a11275-f9fa-41cd-a358-ff6d00bd8085
+[root@room9pc01 ~]# virsh   secret-list  查看UUID
+
+UUID                                  用量
+--------------------------------------------------------------------------------
+ 51a11275-f9fa-41cd-a358-ff6d00bd8085  ceph client.admin  secret
+
+
+8.查看ceph的client.admin的key
+[root@room9pc01 ~]# ceph  auth  get-key  client.admin
+AQD0vAJby0NiERAAcdzYc//ONLqlyNXO37xlJA==
+
+9.将第7、8步的虚拟机secret和ceph的client.admin进行关联
+[root@room9pc01 ~]# virsh   secret-set-value  --secret  51a11275-f9fa-41cd-a358-ff6d00bd8085  --base64  AQD0vAJby0NiERAAcdzYc//ONLqlyNXO37xlJA==
+secret 值设定
+这里secret后面是之前创建的secret的UUID
+base64后面是client.admin账户的密码
+现在secret中既有账户信息又有密钥信息
+
+10.修改生成的虚拟机配置文件
+[root@room9pc01 ~]# vim  /tmp/vm1.xml 
+32      <disk type='network' device='disk'>
+33       <driver name='qemu' type='raw'/>
+注释掉34行，在下面手动添加内容
+34         <auth  username='admin'>
+35       <secret type='ceph'  uuid='51a11275-f9fa-41cd-a358-ff6d00bd8085' />   这里的uuid就是secret的uuid,有client.admin账户和密钥信息
+36         </auth>
+37    <source protocol='rbd'  name='rbd/vm1-image'>
+38         <host  name='192.168.4.11' port='6789' />
+39         </source>
+使用账户连接哪台ceph主机和端口,访问哪个池和镜像
+40 <target dev='vda' bus='virtio'/>
+将获取的镜像,设置为虚拟机的vda磁盘
+
+11.生成虚拟机
+[root@room9pc01 ~]# virsh  define  /tmp/vm1.xml 
+定义域 vm1（从 /tmp/vm1.xml）
+然后就可以看到刚删除的虚拟机又给还原回来，然后点击灯泡再创建虚拟机，添加镜像，点击引导选项-->启用-->VirtlO磁盘1，上升到第一个
+
+
+
+
+CephFS的使用：注意，这种方法还不成熟，不要应用在生产环境下
+
+1.部署mds服务器
+配置主机名，yum，NTP，名称解析，node1免密登录mds节点
+
+[root@node4 ~]# yum  -y  install   ceph-mds
+
+2.创建元数据服务器，必须在ceph-cluster目录上
+[root@node1 ceph-cluster]# pwd
+/root/ceph-cluster
+[root@node1 ceph-cluster]# ceph-deploy   mds  create  node4
+
+3.同步配置文件和key
+[root@node1 ceph-cluster]# ceph-deploy   admin  node4
+然后在node4节点上查看
+[root@node4 ~]# ceph  -s
+health HEALTH_OK
+
+
+4.为cephFS创建数据池和元数据池，指定每个OSD有128个PG
+关于PG的说明：在http://www,wzxue.com/ceph-osd-and-pg/
+[root@node4 ~]# ceph  osd  pool  create  cephfs_data  128
+pool 'cephfs_data' created
+[root@node4 ~]# ceph  osd  pool  create  cephfs_metadata  128
+pool 'cephfs_metadata' created
+
+
+5.查看mds状态
+[root@node4 ~]# ceph  mds  stat
+e2:, 1 up:standby
+
+6.创建名为myfs1的文件系统
+[root@node4 ~]# ceph  fs  new  myfs1  cephfs_metadata   cephfs_data
+new fs with metadata pool 2 and data pool 1
+默认只能创建1个文件系统,多余的会报错
+
+7.查看信息
+[root@node4 ~]# ceph  mds  stat
+e5: 1/1/1 up {0=node4=up:active}
+[root@node4 ~]# ceph  fs  ls
+name: myfs1, metadata pool: cephfs_metadata, data pools: [cephfs_data ]
+
+
+8.Linux内核已支持cephFS，只要挂载即可
+-t  类型 
+
+[root@client ~]# mkdir  /mnt/ceph_root
+[root@client ~]# ceph  auth  list  查看admin的key
+client.admin
+	key: AQD0vAJby0NiERAAcdzYc//ONLqlyNXO37xlJA==
+
+[root@client ~]# mount  -t  ceph  192.168.4.11:6789:/  /mnt/ceph_root/  -o  name=admin,secret=AQD0vAJby0NiERAAcdzYc//ONLqlyNXO37xlJA==
+
+[root@client ~]# df  -h
+文件系统               容量  已用  可用 已用% 挂载点
+192.168.4.11:6789:/     60G 1008M   59G    2% /mnt/ceph_root
+
+
+数组：数据相邻存放，随机读取特别容易，必须挨着，有足够大的空间
+链表：有头有尾，可以随意插入数据，但是不好找，只要找到数据的指针位置，存到下一个数据，找的时候从头开始找
+哈希表：每个字符串只有一个hash值，不同的字符串hash值不能相同
+
+
+对象存储
+
+1.什么是对象存储
+2.安装rgw
+[root@node1 ceph-cluster]# ceph-deploy  install  --rgw  node5
+
+3.同步配置文件和key
+[root@node1 ceph-cluster]# ceph-deploy   admin  node5
+
+4.启动rgw服务
+[root@node1 ceph-cluster]# ceph-deploy  rgw  create  node5
+[ceph_deploy.rgw][INFO  ] The Ceph Object Gateway (RGW) is now running on host node5 and default port 7480    网关接口
+
+5.修改rgw端口，默认端口是7480，不是必须改
+[root@node5 ceph-cluster]# vim  /etc/ceph/ceph.conf 
+加入一下几行：
+[client.rgw.node5]
+host = node5
+rgw_frontends = "civetweb  port=8081"  随便写，写一个好记的
+
+6.重启服务，以便生效
+[root@node5 ~]# systemctl   restart  ceph-radosgw@\*
+
+7.客户端访问rgw验证
+[root@client ~]# curl   http://node5:8081
+<?xml version="1.0" encoding="UTF-8"?><ListAllMyBucketsResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Owner><ID>anonymous</ID><DisplayName></DisplayName></Owner><Buckets></Buckets></ListAllMyBucketsResult>
+出现这些内容表示正常
+
+
+8.创建对象访问的用户
+[root@node5 ~]# radosgw-admin  user  create  --uid="testuser"  --display-name="First User"   First User是一个昵称，随便写
+要用到
+"user": "testuser",
+"access_key": "CJ38ADJYNMR3F3DJ3C9J",
+"secret_key": "k5DZgUXBMJs3fdv5bT7yNFJiNw2bKac7D1IxO12I"
+
+
+9.查看用户信息
+[root@node5 ~]# radosgw-admin  user  info  --uid="testuser"
+
+10.客户端安装s3工具
+[root@room9pc01 ~]# scp  -r  cluster相关软件/ceph/s3cmd-2.0.1-1.el7.noarch.rpm    192.168.4.10:/root
+[root@client ~]# yum  -y  localinstall  s3cmd-2.0.1-1.el7.noarch.rpm 
+
+
+11.配置客户端
+[root@client ~]# s3cmd   --configure
+Access Key: CJ38ADJYNMR3F3DJ3C9J
+Secret Key: k5DZgUXBMJs3fdv5bT7yNFJiNw2bKac7D1IxO12I
+Default Region [US]: 回车
+S3 Endpoint [s3.amazonaws.com]: 192.168.4.15:8081
+onaws.com]: %(bucket)s.192.168.4.15:8081
+Encryption password: 回车
+Path to GPG program [/usr/bin/gpg]: 回车
+Use HTTPS protocol [Yes]: N
+HTTP Proxy server name: 回车
+Test access with supplied credentials? [Y/n] y 
+Save settings? [y/N] y
+
+
+12.客户端上传下载测试
+[root@client ~]# s3cmd  ls   查看数据
+[root@client ~]# s3cmd mb  s3://my_bucket  创建my_bucket
+Bucket 's3://my_bucket/' created
+
+上传
+[root@client ~]# s3cmd  put  /var/log/messages  s3://my_bucket/log
+upload: '/var/log/messages' -> 's3://my_bucket/log'  [1 of 1]
+ 403379 of 403379   100% in    4s    97.49 kB/s  done
+[root@client ~]# s3cmd  ls  s3://my_bucket
+2018-05-22 09:24    403379   s3://my_bucket/log
+
+下载
+[root@client ~]# s3cmd  get  s3://my_bucket/log/messages   /tmp
+download: 's3://my_bucket/log/messages' -> '/tmp/messages'  [1 of 1]
+ 403379 of 403379   100% in    0s    32.63 MB/s  done
+
+删除
+[root@client ~]# s3cmd  del  s3://my_bucket/log/messages
+delete: 's3://my_bucket/log/messages'
+
+
+
+
+
+
+
+
+
+
+
+
+
+

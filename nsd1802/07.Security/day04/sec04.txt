@@ -1,0 +1,93 @@
+时间
+事件成功与否
+用户
+comm
+exec
+name
+
+-w path -p rwxa -k key_name
+service auditd restart
+
+在虚拟机里关闭虚拟机服务
+systemctl disable libvirtd
+reboot
+清除规则：
+iptables -F
+[root@svr7 ~]# iptables -t filter -F
+查看规则：
+[root@svr7 ~]# iptables -t filter -L 
+iptables -L
+iptables -nL INPUT   -n不把ip或者端口解析成主机名
+iptables -I INPUT 2 -p icmp -j ACCEPT
+
+删除某一条规则：
+iptables -D INPUT 1
+查看nat表里的规则：
+iptables -t nat -L
+清空nat表里的规则：
+iptables -t nat -F
+
+缺省规则
+iptables -P INPUT DROP
+                  ACCEPT
+
+查看ip转发：
+cat /proc/sys/net/ipv4/ip_forward
+
+临时修改：
+echo 1 > /proc/sys/net/ipv4/ip_forward
+永久修改：
+vim /etc/sysctl.conf
+net.ipv4.ip_forward = 1
+生效：
+sysctl -p
+
+
+					   INPUT
+iptables -t filter -A OUTPUT   -s              -j 动作
+            nat    -I FORWARD  -d
+			mangle              -p tcp --dport  
+			raw  					udp --sport
+									icmp
+								 -i eth0
+                               -o	
+
+动作：
+ACCEPT
+DROP
+REJECT
+LOG
+SNAT
+
+-P 
+-L
+-F
+-D 
+
+
+删除多余的网络连接
+nmcli connection delete UUID
+iptables -F
+iptables -F -t nat
+
+查看mac地址：
+ip link ls dev eth0
+-m mac --mac-source用于INPUT链
+-m multiport --dport 20:25,110
+-m iprange --src-range 192.168.4.100-192.168.4.200 
+
+
+伪装：
+iptables -t nat -A POSTROUTING -s 192.168.4.0/24 -j MASQUERADE
+
+filter表
+INPUT：数据包的目的ip地址是防火墙的ip地址，这个数据包是防火墙接收的。
+OUTPUT：数据包的源地址是防火墙的ip地址，这个数据包是防火墙产生的。
+FORWARD：数据包的源地址和目的地址都不是防火墙的ip地址，这时会检查这个链里的规则，这个规则可以过滤nat的数据包。
+
+nat表
+POSTROUTING
+共享上网
+
+
+

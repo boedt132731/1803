@@ -1,0 +1,223 @@
+++++++++++++++++++++++++++++++
+DBA   
+NoSQL  (Redis 和 Mongodb)
+Redis           3天
+Mongodb   2天
+
+RDBMS---MySQL   Oracle   SQL server  DB2
+NoSQL ---Redis  Mongodb
+
+192.168.4.51
+
+Redis 服务的使用。
+搭建Redis 服务器  192.168.4.51
+配置步骤
+1 装包
+  379  ls redis-4.0.8.tar.gz 
+  380  rpm  -q  gcc gcc-c++   
+          yum  -y  install gcc  gcc-c++
+
+  382  tar -zxf redis-4.0.8.tar.gz 
+  383  cd redis-4.0.8/
+  385  make   &&  make install
+
+[root@host56 redis-4.0.8]# ./utils/install_server.sh 
+Welcome to the redis service installer
+This script will help you easily set up a running redis server
+
+Please select the redis port for this instance: [6379] 
+Selecting default: 6379
+Please select the redis config file name [/etc/redis/6379.conf] 
+Selected default - /etc/redis/6379.conf
+Please select the redis log file name [/var/log/redis_6379.log] 
+Selected default - /var/log/redis_6379.log
+Please select the data directory for this instance [/var/lib/redis/6379] 
+Selected default - /var/lib/redis/6379
+Please select the redis executable path [/usr/local/bin/redis-server] 
+Selected config:
+Port           : 6379
+Config file    : /etc/redis/6379.conf
+Log file       : /var/log/redis_6379.log
+Data dir       : /var/lib/redis/6379
+Executable     : /usr/local/bin/redis-server
+Cli Executable : /usr/local/bin/redis-cli    连接redis服务的命令
+Is this ok? Then press ENTER to go on or Ctrl-C to abort.   回车
+Copied /tmp/6379.conf => /etc/init.d/redis_6379
+Installing service...
+Successfully added to chkconfig!
+Successfully added to runlevels 345!
+Starting Redis server...
+Installation successful!
+[root@host56 redis-4.0.8]# 
+
+]# netstat  -utnlp  |  grep :6379
+tcp        0      0 127.0.0.1:6379          0.0.0.0:*               LISTEN      15706/redis-server  
+[root@host56 redis-4.0.8]# 
+
+
+修改配置文件
+/etc/redis/6379.conf
+
+查看数据库目录列表：
+ls  /var/lib/redis/6379
+
+启动服务
+]# /etc/init.d/redis_6379  status | stop  |  start
+
+
+
+查看服务信息
+ps  -C  redis-server
+# netstat  -utnlp  |  grep :6379
+
+客户访问服务
+echo  $PATH
+/usr/local/bin/redis-cli
+[root@host56 redis-4.0.8]# redis-cli 
+127.0.0.1:6379> exit
+[root@host56 redis-4.0.8]#  
+               
+
+++++++++++++++++部署 LNMP+Redis
+1 搭建LNMP
+   9  netstat -utnlp  | grep :80
+   10  rpm  -q gcc  gcc-c++
+   11  yum  -y  install gcc  gcc-c++
+  
+   13  tar -zxf nginx-1.12.2.tar.gz 
+   14  cd nginx-1.12.2/
+   16  yum  -y  install pcre-devel    zlib-devel
+   17  ./configure  --prefix=/usr/local/nginx
+   20  make 
+   21  make  install
+
+   24  /usr/local/nginx/sbin/nginx 
+   25  netstat -utnlp | grep :80
+   26  echo 123  > /usr/local/nginx/html/test.html
+
+
+   32  rpm -q php-common
+   33  yum -y install  php-common
+   34  rpm -ivh php-fpm-5.4.16-42.el7.x86_64.rpm 
+    36  systemctl  status  php-fpm.service 
+
+   37  systemctl  start  php-fpm.service 
+   38  netstat -utnlp  | grep :9000
+
+
+[root@host53 lnmp]# sed -n  '65,71p' /usr/local/nginx/conf/nginx.conf
+        location ~ \.php$ {
+            root           html;
+            fastcgi_pass   127.0.0.1:9000;
+            fastcgi_index  index.php;
+            fastcgi_param  SCRIPT_FILENAME  $document_root$fastcgi_script_name;
+            include        fastcgi_params;
+        }
+[root@host53 lnmp]#
+   42  /usr/local/nginx/sbin/nginx  -s stop
+   43  /usr/local/nginx/sbin/nginx
+
+[root@host53 lnmp]# vim  /usr/local/nginx/html/test.php
+<?php
+phpinfo();
+?>
+[root@host53 lnmp]# 
+ 
+
+在宿主机访问53 上的网站服务
+http://192.168.4.53/test.html
+http://192.168.4.53/test.php
+
+
++++++++++++++2 部署PHP支持Redis
+2.1 在53 网站本机运行redis服务。
+   51  tar -zxf redis-4.0.8.tar.gz 
+   52  cd redis-4.0.8/
+   53  make
+   54  make install
+   55  ./utils/install_server.sh 
+]# netstat -utnlp  | grep :6379
+[root@host53 redis-4.0.8]# redis-cli  
+127.0.0.1:6379> ping
+PONG
+127.0.0.1:6379> set    x  10
+OK
+127.0.0.1:6379> get x
+"10"
+127.0.0.1:6379> exit
+[root@host53 redis-4.0.8]#
+
+
+安装软件包，提供PHP连接Redis服务的模块redis.so
+          yum -y  install    automake    autoconf   php-cli
+    6    rpm -ivh php-devel-5.4.16-42.el7.x86_64.rpm 
+
+[root@host53 lnmp]# ls /usr/bin/phpize
+/usr/bin/phpize
+
+[root@host53 lnmp]# ls /usr/bin/phpize
+/usr/bin/phpize
+[root@host53 lnmp]# ls
+nginx-1.12.2                        php-fpm-5.4.16-42.el7.x86_64.rpm
+nginx-1.12.2.tar.gz                 php-redis-2.2.4.tar.gz
+php-devel-5.4.16-42.el7.x86_64.rpm
+[root@host53 lnmp]# 
+[root@host53 lnmp]# tar -zxf php-redis-2.2.4.tar.gz 
+[root@host53 lnmp]# cd phpredis-2.2.4/
+[root@host53 phpredis-2.2.4]# /usr/bin/phpize
+Configuring for:
+PHP Api Version:         20100412
+Zend Module Api No:      20100525
+Zend Extension Api No:   220100525
+[root@host53 phpredis-2.2.4]# ls /usr/bin/php-config
+/usr/bin/php-config
+
+[root@host53 phpredis-2.2.4]#./configure  --with-php-config=/usr/bin/php-config
+
+]#  make  
+[root@host53 phpredis-2.2.4]# make install
+Installing shared extensions:     /usr/lib64/php/modules/
+
+[root@host53 phpredis-2.2.4]# ls /usr/lib64/php/modules/
+curl.so  fileinfo.so  json.so  phar.so  redis.so  zip.so
+[root@host53 phpredis-2.2.4]# 
+
+修改 php 程序配置文件php.ini
+vim /etc/php.ini
+ 728 extension_dir = "/usr/lib64/php/modules/"
+ 729 ; On windows:
+ 730 extension = "redis.so"
+:wq
+
+]# systemctl  restart php-fpm.service
+
+]#  php  -m 
+
+]#  php  -m  |  grep  -i   redis
+redis
+
+http://192.168.4.53/test.php
+redis
+
+
+
+测试配置
+vim   /usr/local/nginx/html/linkredis.php
+<?php
+$redis = new redis();$redis->connect('127.0.0.1',6379);
+$redis->set('x','666666');
+echo $redis->get('x');?>
+:wq
+
+在宿主机访问53 上的网站服务
+
+http://192.168.4.53/linkredis.php
+
+666666
+
+[root@host53 ~]# redis-cli 
+127.0.0.1:6379> keys  *
+1) "y"
+2) "x"
+127.0.0.1:6379> get y
+"666666"

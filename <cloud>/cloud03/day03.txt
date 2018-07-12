@@ -1,0 +1,41 @@
+去IOE
+IBM: 小型机
+Oracle数据库
+EMC存储
+
+《大型网站技术架构》
+
+LAMP分离结构
+1、准备三台虚拟机
+vh01.tedu.cn  192.168.4.1  mysql
+vh02.tedu.cn  192.168.4.2  web1
+vh03.tedu.cn  192.168.4.3  web2
+2、在vh01上安装mariadb并起动
+[root@vh01 ~]# yum install -y mariadb-server
+[root@vh01 ~]# systemctl start mariadb
+[root@vh01 ~]# systemctl enable  mariadb
+3、配置mariadb
+[root@vh01 ~]# mysql -uroot
+MariaDB [(none)]> grant all on *.* to 'admin'@'192.168.4.2' identified by 'tedu.cn';
+MariaDB [(none)]> grant all on *.* to 'admin'@'192.168.4.3' identified by 'tedu.cn';
+4、在vh02上安装httpd和php
+[root@vh02 ~]# yum install -y httpd php php-mysql
+[root@vh02 ~]# systemctl start httpd
+[root@vh02 ~]# systemctl enable httpd
+5、安装Discuz
+[root@vh02 ~]# unzip Discuz_X3.0_SC_UTF8.zip 
+[root@vh02 ~]# cp -r upload/ /var/www/html/bbs
+[root@room8pc16 cloud]# firefox http://192.168.4.2/bbs/ &
+6、安装时，提示改权限，方法如下：
+[root@vh02 ~]# cd /var/www/html/bbs/
+[root@vh02 bbs]# vim ../mode.txt 把web页中内容粘贴进去
+[root@vh02 bbs]# chmod 777 $(awk '{print $1}' ../mode.txt)
+7、配置vh03
+[root@vh03 ~]# yum install -y httpd php php-mysql
+[root@vh03 ~]# systemctl start httpd
+[root@vh03 ~]# systemctl enable httpd
+[root@vh02 html]# tar czf bbs.tar.gz bbs
+[root@vh02 html]# scp bbs.tar.gz 192.168.4.3:/var/www/html/
+[root@vh03 html]# tar xzf bbs.tar.gz 
+
+

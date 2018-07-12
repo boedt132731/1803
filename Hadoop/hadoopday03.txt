@@ -1,0 +1,144 @@
+集群高可用
+namenode   问题，单点故障，一旦宕机，数据全部丢失
+secondarynamenode   小蜜，宕机以后，在找一个
+datanode  存储数据的节点，天生自带冗余光环，一旦宕机及时修复即可
+
+1  zookeeper 原理及集群搭建
+1.1、
+    关闭 selinux, 禁用 firewalld， 安装  openjdk， jps
+1.2
+解压软件包，拷贝到 /usr/local/zookeeper 下
+拷贝 conf 下配置文件  cp zoo_sample.cfg  zoo.cfg
+添加配置
+server.1=node1:2888:3888
+server.2=node2:2888:3888
+server.3=node3:2888:3888
+server.4=nn01:2888:3888:observer
+
+创建数据目录，配置 id
+mkdir /tmp/zookeeper
+echo   id  >/tmp/zookeeper/myid
+
+1.3
+启动服务，查看状态
+/usr/local/zookeeper/bin/zkServer.sh start
+/usr/local/zookeeper/bin/zkServer.sh status
+
+1.4  利用api 查看状态的脚本
+#!/bin/bash
+function getzk(){
+    exec 2>/dev/null
+    exec 9<>/dev/tcp/$1/2181
+    echo "stat" >&9 
+    _S=$(cat <&9 2<&1 |grep -P "Mode:.*")
+    exec 9<&-
+    echo ${_S:-Mode: NULL}
+}
+
+for i in node{1..3} nn01;do
+    echo -ne "${i}\t"
+    getzk ${i}
+done
+
+2  利用 zookeeper 组件  kafka 集群
+2.1、
+    关闭 selinux, 禁用 firewalld， 安装  openjdk， jps
+2.2 解压 kafka 到 /usr/local/kafka
+2.3 修改配置文件  /usr/local/kafka/config/server.properties
+broker.id=1
+zookeeper.connect=node1:2181,node2:2181,node3:2181
+
+2.4 启动服务验证
+./bin/kafka-server-start.sh -daemon config/server.properties
+jps
+
+2.5 测试 kafka
+创建主题
+bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions 1 --topic nsd1711
+
+查看显示已存在的主题
+bin/kafka-topics.sh --list --zookeeper localhost:2181
+
+查看主题的详细信息
+bin/kafka-topics.sh --describe --zookeeper localhost:2181 --topic nsd1711
+
+生存者发布信息
+bin/kafka-console-producer.sh --broker-list localhost:9092 --topic nsd1711
+
+消费者消费信息
+bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic nsd1711
+
+--from-beginning 是从头开始消费消息
+
+3  利用 zoookeeper 实现 namenode 的高可用
+配置文件下载路径 http://118.144.89.240/haconf.tar.gz
+
+系统规划
+#------------------------------------------------------------------------------------#
+                   主机                                        角色
+#------------------------------------------------------------------------------------#
+         192.168.4.10 (nn01)                 namenode
+         192.168.4.20 (nn02)                 namenode
+#------------------------------------------------------------------------------------#
+         192.168.4.11 (node1)               datanode,zookeeper,journalnode
+         192.168.4.12 (node2)               datanode,zookeeper,journalnode
+         192.168.4.13 (node3)               datanode,zookeeper,journalnode
+#------------------------------------------------------------------------------------#
+1、初始化系统
+     关闭 selinux, 禁用 firewalld， 安装  openjdk， jps
+     nn02 也是 namenode ssh 能登录到所有机器，包括自己
+     配置  /etc/hosts
+2、停止所有服务，只启动 zookeeper
+3、重新组建 hdfs 集群，清空  /var/hadoop/ 所有数据
+
+在 nn01 上修改配置文件
+http://118.144.89.240/haconf.tar.gz
+
+初始化集群
+同步配置到所有集群机器  nn02,node1,node2,node3
+nn01 上执行
+初始化zookeeper
+./bin/hdfs  zkfc  -formatZK
+
+node1,node2,node3 执行，启动 journalnode 服务，jps 验证
+./sbin/hadoop-daemon.sh  start  journalnode
+
+nn01 上执行，格式化命令
+./bin/hdfs  namenode  -format
+
+nn02 上执行，拷贝数据目录到本机，格式化以后把数据目录拷贝到另一台 namenode
+rsync -aSH --delete -e 'ssh'  nn01:/var/hadoop/dfs  /var/hadoop
+
+nn01 上执行，初始化 journalnode
+./bin/hdfs  namenode  -initializeSharedEdits
+
+node1,node2,node3 执行，停止 journalnode 服务
+./sbin/hadoop-daemon.sh  stop  journalnode
+
+nn01 上执行，启动集群
+./sbin/start-all.sh
+
+nn02 上执行，启动 resourcemanager 备份服务
+./sbin/yarn-daemon.sh  start  resourcemanager
+
+验证及查看集群状态
+./bin/hdfs haadmin -getServiceState nn1
+./bin/hdfs haadmin -getServiceState nn2
+./bin/yarn rmadmin -getServiceState rm1
+./bin/yarn rmadmin -getServiceState rm2
+
+在 active 上执行，查看节点状态
+./bin/hadoop  dfsadmin  -report
+
+集群启动完成，这是访问 hdfs 需要使用组地址访问
+./bin/hadoop  fs  -ls  hdfs://mycluster/
+./bin/hadoop  fs -mkdir  hdfs://mycluster/input
+
+验证高可用，关闭 active 查看状态
+./sbin/hadoop-daemon.sh stop namenode
+./sbin/yarn-daemon.sh  stop  resourcemanager
+
+curl -i  http://nn01:50070/
+curl -i  http://nn02:50070/
+curl -i  http://nn01:8088/
+curl -i  http://nn02:8088/

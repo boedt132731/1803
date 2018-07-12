@@ -1,0 +1,469 @@
+
+
+56kbps = 7 kB/s
+1byte = 8bit
+
+
+HAProxy服务器
+
+
+HAProxy概述
+
+HAProxy简介：工作在代理的模式下
+	它是免费、快速并且可靠的一种解决方案
+	适用于那些负载特大的web站点,这些站点通常又需要会话保持或七层处理
+	提供高可用性、负载均衡以及基于TCP和HTTP应用的代理
+
+
+衡量负责均衡器性能的因素：
+Session rate 会话率：每秒钟产生的会话数
+Session concurrency 并发会话数：服务器处理会话的时间越长,并发会话数越多（同时有多少访问）
+Data rate 数据速率：以MB/s或Mbps衡量
+			大的对象导致并发会话数增加
+			高会话数、高数据速率要求更多的内存
+
+HAProxy工作模式：
+mode http：客户端请求被深度分析后再发往服务器
+mode tcp：客户端与服务器之间建立会话,不检查第七层信息
+mode health：仅做健康状态检查,已经不建议使用
+
+HTTP协议解析
+
+HTTP解析：
+	当HAProxy运行在HTTP模式下,HTTP请求(Request)和响应(Response)均被完全分析和索引,这样便于创建恰当的匹配规则
+	理解HTTP请求和响应,对于更好的创建匹配规则至关重要
+
+
+HTTP事务模型：
+	HTTP协议是事务驱动的
+	每个请求(Request)仅能对应一个响应(Response)
+常见模型：
+	HTTP close：客户端向服务器建立一个TCP连接
+			客户端发送请求给服务器
+			服务器响应客户端请求后即断开连接
+			如果客户端到服务器的请求不只一个,那么就要不断的去建立连接
+			TCP三次握手消耗相对较大的系统资源,同时延迟较大
+	Keep-alive：一次连接可以传输多个请求
+			客户端需要知道传输内容的长度,以避免无限期的等待传输结束
+			降低两个HTTP事务间的延迟
+			需要相对较少的服务器资源
+	Pipelining：仍然使用Keep-alive
+			在发送后续请求前,不用等前面的请求已经得到回应
+			适用于有大量图片的页面
+			降低了多次请求之间的网络延迟
+
+HTTP头部信息
+请求头部信息：
+	方法：GET
+	URI：/serv/login.php?lang=en&profile=2
+	版本：HTTP/1.1
+请求头包含许多有关的客户端环境和请求正文的有用信息,如浏览器所使用的语言、请求正文的长度等
+
+响应头部信息：
+	版本：HTTP/1.1
+	状态码：200  【有的状态码是300 Movred  Permanently  永久重定向，，5？？拒绝访问】
+	原因：OK
+
+
+HAProxy配置实例
+
+配置文件说明
+HAProxy配置参数来源：
+	命令行：总是具有最高优先级
+	global部分：全局设置进程级别参数
+	代理声明部分：来自于default、listen、frontend和backend
+
+配置文件可由如下部分构成:
+default：为后续的其他部分设置缺省参数
+	    缺省参数可以被后续部分重置
+frontend：描述接收客户端侦听套接字(socket)集
+backend：描述转发链接的服务器集
+listen：把frontend和backend结合到一起的完整声明
+
+
+
+Keepalived热备 ： 高可用主备机制
+
+Keepalived概述：
+调度器出现单点故障,如何解决?
+	Keepalived实现了高可用集群
+	Keepalived最初是为LVS设计的,专门监控各服务器节点的状态
+	Keepalived后来加入了VRRP功能,防止单点故障
+
+Keepalived运行原理：
+	Keepalived检测每个服务器节点状态
+	服务器节点异常或工作出现故障, Keepalived将故障节点从集群系统中剔除
+	故障节点恢复后,Keepalived再将其加入到集群系统中
+	所有工作自动完成,无需人工干预
+
+HSRP：热备份路由协议，思科私有
+VRRP：虚拟冗余路由协议 ，IETF共有标准相
+
+
+
+
+hapoxy配置（负载均衡集群）
+
+1.vh04上安装haproxy
+[root@vh04 ~]# yum  -y  install   haproxy
+
+2.修改配置文件
+
+[root@vh04 ~]# vim  /etc/haproxy/haproxy.cfg 
+
+26     log         127.0.0.1 local2   [err	warning	info	debug]	
+28     chroot      /var/lib/haproxy   haproxy的pid存放路径
+29     pidfile     /var/run/haproxy.pid  最大连接数,默认4000	
+30     maxconn     4000
+31     user        haproxy
+32     group       haproxy
+33     daemon    创建1个进程进入deamon模式运行	
+
+
+defaults	
+mode	http	默认的模式mode {tcp|http|health}	log global采用全局定义的日志
+option  dontlognull	 不记录健康检查的日志信息
+option  httpclose	每次请求完毕后主动关闭hEp通道
+option httplog	日志类别hEp日志格式
+option forwardfor	后端服务器可以从HEp	Header中获得客户端ip	
+option  redispatch	serverid服务器挂掉后强制定向到其他健康服务器
+timeout connect 10000  如果backend没有指定,默认为10s	
+timeout client 300000   客户端连接超时
+timeout server 300000	服务器连接超时
+maxconn  60000	最大连接数
+retries  3	3次连接失败就认为服务不可用,也可以通过后面设置
+
+将这个以下部分全部删除，
+60 #---------------------------------------------------------------------
+61 # main frontend which proxys to the backends
+62 #---------------------------------------------------------------------
+在最下面添加一下内容
+
+listen  stats
+        bind  0.0.0.0:1080 端口号随便写
+        stats  refresh  30s   每30s刷新一次
+	  stats  uri  /stats  查看刷新文件的页面url
+	  stats  realm  haprox  manager  最后两个随便写
+	  stats  auth  admin:admin  统计页面的用户名和密码，前面是用户名
+listen  web_backend  0.0.0.0:80   后端服务器，监听在80端口
+	cookie  SERVERID  rewrite
+	balance  roundrobin
+	server  web1  192.168.4.2:80  cookie  a1i1  check inter  2000  rise  2  fall  5 检查这台服务器，两千毫秒检查一次，检查超过5次是不成功的
+	server  web1  192.168.4.3:80  cookie  a1i2  check inter  2000  rise  2  fall  5 
+
+3.启动haproxy服务
+[root@vh04 ~]# systemctl   restart   haproxy
+
+访问验证：
+[root@vh01 ~]# firefox   192.168.4.4:1080/stats
+用户名和密码都是admin
+stop掉vh02和vh03任何一台，刷新页面，查看页面颜色的变化
+
+
+
+配置调度器本身也是日志服务器，可以接受网络发来的日志
+[root@vh04 ~]# netstat  -nutlp  |grep  :514
+[root@vh04 ~]# vim  /etc/rsyslog.conf 
+去掉日志
+15 $ModLoad imudp
+16 $UDPServerRun 514
+
+19 $ModLoad imtcp
+20 $InputTCPServerRun 514
+
+[root@vh04 ~]# systemctl   restart   rsyslog
+[root@vh04 ~]# netstat  -nutlp  |grep  :514
+tcp        0      0 0.0.0.0:514             0.0.0.0:*               LISTEN      7897/rsyslogd       
+tcp6       0      0 :::514                  :::*                    LISTEN      7897/rsyslogd       
+udp        0      0 0.0.0.0:514             0.0.0.0:*                           7897/rsyslogd       
+udp6       0      0 :::514                  :::*                                7897/rsyslogd       
+
+客户端访问：
+[root@room9pc01 ~]# firefox  192.168.4.4:1080/stats
+[root@room9pc01 ~]# firefox  192.168.4.4
+这两个访问哪个都可以                                                                                 
+
+查看haproxy的日志：
+[root@vh04 ~]# tail    -f  /var/log/messages
+客户端访问负载均衡，将有日志产生
+
+
+配置高可用web集群
+
+vh01,vh02,vh03三台虚拟机
+
+1.在两台web服务器vh02,vh03上安装keepalived
+
+[root@vh02 ~]# yum  -y  install  keepalived
+
+2.配置
+[root@vh02 ~]# vim  /etc/keepalived/keepalived.conf 
+将全局的 vrrp_strict 这一行注释掉
+global_defs {
+   notification_email {  管理员email地址
+        root@localhost
+}
+   notification_email_from   admin@tedu.cn  谁发
+   smtp_server 127.0.0.1    用哪台服务器发
+   smtp_connect_timeout 30
+   router_id LVS_DEVEL    设置路由的ID号
+   vrrp_skip_check_adv_addr
+   vrrp_garp_interval 0
+   vrrp_gna_interval 0
+}  
+
+vrrp_instance VI_1 {    VI_1 随便起的名，实例名
+    state MASTER    主服务器
+    interface eth0   用哪一个网卡
+    virtual_router_id 51  产生虚拟路由器的ID号，ID号要求一样
+    priority 150   优先级
+    advert_int 1   通告间隔，每隔一秒发一次
+    authentication {  认证，用密码做认证的，是共享密码，要求一样
+        auth_type PASS
+        auth_pass 1111   主辅服务器密码必须一致
+    }
+    virtual_ipaddress {   虚拟地址，两个节点必须一样
+        192.168.4.200
+
+    }
+}
+
+剩下的全部删除
+[root@vh02 ~]# systemctl   start   keepalived
+[root@vh02 ~]# ip  a  s  eth0
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:ec:bb:c1 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.4.2/24 brd 192.168.4.255 scope global eth0
+       valid_lft forever preferred_lft forever
+    inet 192.168.4.200/32 scope global eth0
+       valid_lft forever preferred_lft forever
+
+
+[root@vh02 ~]# scp  /etc/keepalived/keepalived.conf   192.168.4.3:/etc/keepalived/keepalived.conf 
+
+
+[root@vh03 ~]# vim  /etc/keepalived/keepalived.conf
+
+global_defs {
+   notification_email {
+        root@localhost
+}  
+   notification_email_from   admin@tedu.cn
+   smtp_server 127.0.0.1 
+   smtp_connect_timeout 30
+   router_id LVS_DEVEL 
+   vrrp_skip_check_adv_addr 
+   vrrp_garp_interval 0
+   vrrp_gna_interval 0
+}   
+
+vrrp_instance VI_1 {
+    state BACKUP  从属的用BACKUP
+    interface eth0 
+    virtual_router_id 51
+    priority 100
+    advert_int 1   
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    virtual_ipaddress {
+        192.168.4.200
+    }
+}   
+
+3.清空防火墙规则
+[root@vh02 ~]# iptables  -F
+[root@room9pc01 ~]# ping  192.168.4.200
+[root@room9pc01 ~]# firefox  192.168.4.200/bbs
+
+在vh02上关闭keepalived，再查看eth0的ip，再用客户端访问
+
+[root@vh02 ~]# systemctl   stop  keepalived
+[root@vh03 ~]# ip  a  s  eth0
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:df:6b:7c brd ff:ff:ff:ff:ff:ff
+    inet 192.168.4.3/24 brd 192.168.4.255 scope global eth0
+       valid_lft forever preferred_lft forever
+    inet 192.168.4.200/32 scope global eth0
+       valid_lft forever preferred_lft forever
+
+[root@room9pc01 ~]# firefox  192.168.4.200/bbs  依然可以访问
+然后再把vh02重启服务，ip  a s eth0  可以看到ip，在vh03上就没有了
+
+
+LVS+keepalived，实现高可用，负载均衡的web集群
+
+一，web服务器配置
+
+1.修改内核参数
+2.在lo网卡上配置vip
+二，调度器配置
+1.在两台调度器上安装ipvsadm，但是不要配置规则，因为规则将由keepalived配置文件进行配置
+2.打开调度器的路由转发功能，7版本默认是打开的
+3.配置vip，注意：vip是通过keepalived配置的，不要手工配置
+
+
+三，清理
+
+1.将web服务器的keepalived卸载
+[root@vh02 ~]# yum  remove  -y  keepalived
+
+2.将原来调度器的haproxy卸载
+[root@vh04 ~]# yum   remove  -y  haproxy
+
+3.将原来的调度器的lvs规则清除
+[root@vh04 ~]# ipvsadm  -D  -t  192.168.4.100:80
+
+4.清除原来调度器的eth0:0
+[root@vh04 ~]# rm -rf  /etc/sysconfig/network-scripts/ifcfg-eth0:0
+[root@vh04 ~]# systemctl   restart   network
+
+
+四，配置调度器
+
+1.安装额外的调度器  vh05.tedu.cn  192.168.4.5/24
+
+2.在vh04,vh05两台调度器上安装ipvsadm，keepalived
+[root@vh04 ~]# yum -y  install   ipvsadm   keepalived
+[root@vh05 ~]# yum -y  install   ipvsadm   keepalived
+
+3.配置主调度器
+[root@vh04 ~]# vim  /etc/keepalived/keepalived.conf
+
+5         root@localhost
+7    notification_email_from  admin@tedu.cn
+8    smtp_server 127.0.0.1
+10    router_id vh04  路由器ID号
+12   # vrrp_strict
+21     priority 150
+28         192.168.4.100  与vip调度器地址一样
+
+给lvs配置规则
+32 virtual_server 192.168.4.100 80 {
+33     delay_loop 6
+34     lb_algo rr 
+35     lb_kind DR
+36     persistence_timeout 50  50秒内客户端访问我，让他访问相同的调度器
+39     real_server 192.168.4.2 80 {
+41         TCP_CHECK {
+删除41行下面的8行
+42             connect_timeout 3  超时时间3秒
+43             nb_get_retry 3   失败一共检查三次
+44             delay_before_retry 3
+45         }
+46     }
+复制上面的8行，剩下的全部删除
+47     real_server 192.168.4.3 80 {
+48         weight 1
+49         TCP_CHECK {
+50             connect_timeout 3
+51             nb_get_retry 3
+52             delay_before_retry 3
+53         }
+54     }
+55 }
+
+[root@vh04 ~]# systemctl   restart  keepalived
+[root@vh04 ~]# ipvsadm  -Ln
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port Scheduler Flags
+  -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
+TCP  192.168.4.100:80 rr persistent 50
+  -> 192.168.4.2:80               Route   1      0          0         
+  -> 192.168.4.3:80               Route   1      0          0        
+
+[root@vh04 ~]# ip a s eth0
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:e3:2e:83 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.4.4/24 brd 192.168.4.255 scope global eth0
+       valid_lft forever preferred_lft forever
+    inet 192.168.4.100/32 scope global eth0
+       valid_lft forever preferred_lft forever
+
+[root@room9pc01 ~]# firefox  192.168.4.100
+访问的是vh03上的内容
+
+
+
+4.备份调度器，同上，注意state为BACKUP
+[root@vh04 ~]# scp /etc/keepalived/keepalived.conf   192.168.4.9:/etc/keepalived/keepalived.conf 
+   state BACKUP
+   priority 100
+
+[root@vh09 ~]# systemctl   restart   keepalived
+[root@vh09 ~]# ipvsadm  -Ln
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port Scheduler Flags
+  -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
+TCP  192.168.4.100:80 rr persistent 50
+  -> 192.168.4.2:80               Route   1      0          0         
+  -> 192.168.4.3:80               Route   1      0          0         
+
+
+[root@vh04 ~]# systemctl  stop   keepalived
+[root@vh04 ~]# ip  a  s  eth0
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:e3:2e:83 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.4.4/24 brd 192.168.4.255 scope global eth0
+       valid_lft forever preferred_lft forever
+
+[root@vh05 ~]# ip  a  s  eth0
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:1d:71:cf brd ff:ff:ff:ff:ff:ff
+    inet 192.168.4.9/24 brd 192.168.4.255 scope global eth0
+       valid_lft forever preferred_lft forever
+    inet 192.168.4.100/32 scope global eth0
+       valid_lft forever preferred_lft forever
+
+
+[root@vh04 ~]# mail  可以查到邮件
+[root@vh05 ~]# mail
+
+
+keepalived双主配置
+在keepalived高可用配置文件里，再添加主从，跟原来的主从配置刚好相反，
+
+
+keepalived高可用 + mysql主从 配置，实现当一台数据库挂掉时，可以自动转换到另一台数据库上工作，需要三台虚拟机，mysql1做主，给用户授权，允许任何主机登录，mysql2做从，
+mysql1的主配置文件
+server_id=51
+log-bin=db51
+binlog-format="mixed"
+
+主库授权：mysql> grant   replication  slave   on  *.*  to  yaya@"%"   identified    by  "123456";
+mysql> show  master  status;
+配置虚拟vip lo:0   192.168.4.100
+
+
+
+mysql2的主配置文件
+server_id=52
+
+配置从库：
+mysql> change  master  to
+    -> master_host="192.168.4.51",
+    -> master_user="yaya",
+    -> master_password="123456",
+    -> master_log_file="db51.000001",
+    -> master_log_pos=154;
+启动slave进程
+mysql> start slave;
+配置虚拟vip lo:0   192.168.4.100
+
+keepalived高可用
+配置虚拟vip eth0:0   192.168.4.100
+修改配置文件
+real_server  mysql1的ip
+real_server  mysql2的ip
+
+启动服务
+访问mysql1
+[root@vh04 ~]# mysql -h192.168.4.1  -uadmin  -p123456
+当mysql1当掉时，访问
+[root@vh04 ~]# mysql -h192.168.4.2  -uadmin  -p123456
+依然可以访问，因为设的固定ip是一样的，都是通过虚拟ip 4.100访问的
+
+
+
+

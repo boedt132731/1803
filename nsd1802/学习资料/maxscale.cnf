@@ -1,0 +1,123 @@
+# MaxScale documentation on GitHub:
+# https://github.com/mariadb-corporation/MaxScale/blob/2.1/Documentation/Documentation-Contents.md
+
+# Global parameters
+#
+# Complete list of configuration options:
+# https://github.com/mariadb-corporation/MaxScale/blob/2.1/Documentation/Getting-Started/Configuration-Guide.md
+
+[maxscale]
+#开多少线程
+threads=auto
+ms_timestamp=1             #timestamp精度  
+syslog=1                   #将日志写入到syslog中    
+maxlog=1                   #将日志写入到maxscale的日志文件中  
+log_to_shm=0               #不将日志写入到共享缓存中，开启debug模式时可打开加快速度  
+log_warning=1              #记录告警信息  
+log_notice=1               #记录notice  
+log_info=1                 #记录info  
+log_debug=0                #不打开debug模式  
+log_augmentation=1         #日志递增  
+#相关目录设置  ,如果改变rpm的日志和数据文件路径，需要通过创建相应目录并改变相应属主为maxscale。
+logdir=/usr/local/maxscale/log/  
+datadir=/usr/local/maxscale/data/  
+libdir=/usr/lib64/maxscale/  
+cachedir=/usr/local/maxscale/cache/  
+piddir=/usr/local/maxscale/
+execdir=/usr/bin/  
+# Server definitions
+#
+# Set the address of the server to the network
+# address of a MySQL server.
+#
+	#{定义后端服务器
+[server1]
+type=server
+address=192.168.4.52
+port=3306
+protocol=MySQLBackend
+
+[server2]
+type=server
+address=192.168.4.54
+port=3306
+protocol=MySQLBackend
+	#}
+# Monitor for the servers
+#
+# This will keep MaxScale aware of the state of the servers.
+# MySQL Monitor documentation:
+# https://github.com/mariadb-corporation/MaxScale/blob/2.1/Documentation/Monitors/MySQL-Monitor.md
+	#{获取数据库服务的信息，确认谁是主，谁是从,权限为"replication  slave, replication client"
+[MySQL Monitor]
+type=monitor
+module=mysqlmon
+servers=server1, server2
+user=rw
+passwd=123456
+monitor_interval=10000
+	#}
+# Service definitions
+#
+# Service Definition for a read-only service and
+# a read/write splitting service.
+#
+
+# ReadConnRoute documentation:
+# https://github.com/mariadb-corporation/MaxScale/blob/2.1/Documentation/Routers/ReadConnRoute.md
+	# {定义只读服务器，使用自动判断，所以注释
+#[Read-Only Service]
+#type=service
+#router=readconnroute
+#servers=server1, server2
+#user=myuser
+#passwd=mypwd
+#router_options=slave
+	#}
+# ReadWriteSplit documentation:
+# https://github.com/mariadb-corporation/MaxScale/blob/2.1/Documentation/Routers/ReadWriteSplit.md
+	#{验证客户端登陆的用户是否有权限,定义在那些服务器做读写分离,给他可以查看mysql库的权限select
+[Read-Write Service]
+type=service
+router=readwritesplit
+servers=server1, server2
+user=acl
+passwd=123456
+max_slave_connections=100%
+	#}
+
+# This service enables the use of the MaxAdmin interface
+# MaxScale administration guide:
+# https://github.com/mariadb-corporation/MaxScale/blob/2.1/Documentation/Reference/MaxAdmin.md
+
+[MaxAdmin Service]
+type=service
+router=cli
+
+# Listener definitions for the services
+#
+# These listeners represent the ports the
+# services will listen on.
+#
+	#{只读服务器监听4008端口,注释
+#[Read-Only Listener]
+#type=listener
+#service=Read-Only Service
+#protocol=MySQLClient
+#port=4008
+	#}
+	#{自动分辨读写服务监听4006端口
+[Read-Write Listener]
+type=listener
+service=Read-Write Service
+protocol=MySQLClient
+port=4006
+	#}
+	#{自定义管理界面的端口
+[MaxAdmin Listener]
+type=listener
+service=MaxAdmin Service
+protocol=maxscaled
+socket=default
+port=4018
+	#}
