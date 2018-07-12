@@ -1,16 +1,23 @@
 #/bin/bash
+<<<<<<< HEAD
 yum -y install expect &> /dev/null
 ##expect默认最后一行不执行
 ls /root/.ssh/id_rsa.pub &> /dev/null
 stat=$?
 if [ $stat -ne 0 ];then
 (expect << EOF
+=======
+yum -y install expect
+##expect默认最后一行不执行
+expect << EOF
+>>>>>>> 13887e175bf14c29b906de8e673cf93f48c08478
 spawn ssh-keygen
 expect "(/root/.ssh/id_rsa)" { send "\r" }
 expect "Enter" { send "\r" }
 expect "Enter" { send "\r" }
 expect eof
 EOF
+<<<<<<< HEAD
 ) > /dev/null
 fi
 ls /root/.ssh/id_rsa.pub &> /dev/null
@@ -31,6 +38,13 @@ done
 #echo ${aa[@]}
 
 for i in ${aa[@]}
+=======
+ls /root/.ssh/
+echo "安全密钥对生成完成"；
+echo "在192.168.4.50-57主机部署密钥登陆,请确认已经安装ssh服务"
+
+for i in 1 2 3
+>>>>>>> 13887e175bf14c29b906de8e673cf93f48c08478
 do
 expect << EOF
 spawn ssh-copy-id 192.168.4.$i
@@ -39,6 +53,9 @@ expect "password" { send "1\r" }
 expect eof
 EOF
 done
+<<<<<<< HEAD
 else
 echo "安全密钥生成失败！！！"
 fi
+=======
+>>>>>>> 13887e175bf14c29b906de8e673cf93f48c08478
