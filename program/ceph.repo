@@ -1,0 +1,17 @@
+[mon]
+name=mon
+baseurl=http://192.168.4.254/ceph/rhceph-2.0-rhel-7-x86_64/MON
+enabled=1
+gpgcheck=0
+
+[osd]
+name=osd
+baseurl=http://192.168.4.254/ceph/rhceph-2.0-rhel-7-x86_64/OSD
+enabled=1
+gpgcheck=0
+
+[tools]
+name=tools
+baseurl=http://192.168.4.254/ceph/rhceph-2.0-rhel-7-x86_64/Tools
+enabled=1
+gpgcheck=0

@@ -6,7 +6,6 @@ echo "1>可用的/var/lib/libvirt/images/{rh7_template.img,.rhel7.xm}文件存�
 echo "2>可用的yum源http://192.168.4.254/rhel7存在"
 echo -e "\e[33;33m - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -\e[0m"
 yum -y install expect &> /dev/null
-sleep 1
 read -p "请输入创建虚拟机编号(1-99)：" num
 IMG_DIR=/var/lib/libvirt/images
 BASEVM=rh7_template
@@ -27,6 +26,13 @@ virsh define /tmp/myvm.xml &> /dev/null
 echo -e "\e[32;1m[OK]\e[0m"
 sleep 2
 virsh start pc$num > /dev/null
+stat1=$?
+if [ $stat1 -ne 0 ];then
+   echo -e "\e[33;31m虚拟机pc$num启动失败!!!!!\e[0m"
+   virsh destroy pc$num &> /dev/null
+   virsh undefine pc$num &> /dev/null
+   exit
+fi
 echo -en "设置IP地址中......                       \t"
 (
 expect << EOF 
@@ -39,7 +45,11 @@ expect "#" { send "/29"}
 expect eof
 EOF
 ) > /dev/null
-
+stat2=$?
+if [ $stat2 -ne 0 ];then
+   echo -e "\e[32;31m[IP ADDR:192.168.4.${num}设置失败]\e[0m"
+   exit
+fi
 echo -e "\e[32;1m[IP ADDR:192.168.4.${num}设置完成]\e[0m"
 echo -en "部署密钥中......                         \t"
 ls /root/.ssh/id_rsa.pub &> /dev/null
@@ -61,6 +71,7 @@ expect "password:" { send "123456\r"}
 expect eof
 EOF
 ) > /dev/null
+
 echo -e "\e[32;1m[密钥部署完成]\e[0m"
 echo -en "虚拟机初始化配置中......                 \t"
 (
@@ -84,4 +95,3 @@ scp /root/桌面/github/program/* 192.168.4.${num}:/usr/local/sbin/ &> /dev/null
 echo -e "\e[32;1m[主机名、初始密码、yum源配置完成]\e[0m"
 echo -e "\e[33;31m                          虚拟机${NEWVM}创建完成                              \e[0m"
 echo -e "\e[33;36m==============================================================================\e[0m"
-
