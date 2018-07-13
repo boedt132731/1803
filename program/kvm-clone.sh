@@ -37,14 +37,17 @@ echo -en "设置IP地址中......                       \t"
 (
 expect << EOF 
 spawn virsh console $NEWVM
+sleep 30
 expect "^]" { send "\r" }
 expect "localhost" { send "root\r" }
-expect "密码：" { send "123456\r" }
+expect "密码" { send "123456\r" }
+sleep 10
 expect "#" { send "ifconfig eth0 192.168.4.${num}/24\r" }
 expect "#" { send "/29"} 
 expect eof
 EOF
 ) > /dev/null
+ping -c 3 192.168.4.${num} &> /dev/null
 stat2=$?
 if [ $stat2 -ne 0 ];then
    echo -e "\e[32;31m[IP ADDR:192.168.4.${num}设置失败]\e[0m"
