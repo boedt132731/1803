@@ -38,7 +38,6 @@ echo -en "设置IP地址中......                       \t"
 expect << EOF 
 spawn virsh console $NEWVM
 sleep 30
-expect "^]" { send "\r" }
 expect "localhost" { send "root\r" }
 expect "密码" { send "123456\r" }
 sleep 10
