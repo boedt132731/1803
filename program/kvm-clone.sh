@@ -9,7 +9,7 @@ yum -y install expect &> /dev/null
 read -p "请输入创建虚拟机编号(1-99)：" num
 IMG_DIR=/var/lib/libvirt/images
 BASEVM=rh7_template
-NEWVM=pc${num}
+NEWVM=node${num}
 if [ -e $IMG_DIR/${NEWVM}.img ]; then
 echo -e "\e[33;31m                        ERROR:${NEWVM}已存在                                \e[0m"
 echo -e "\e[33;36m==============================================================================\e[0m"
@@ -25,12 +25,12 @@ echo -en "Defining new virtual machine......       \t"
 virsh define /tmp/myvm.xml &> /dev/null
 echo -e "\e[32;1m[OK]\e[0m"
 sleep 2
-virsh start pc$num > /dev/null
+virsh start node$num > /dev/null
 stat1=$?
 if [ $stat1 -ne 0 ];then
-   echo -e "\e[33;31m虚拟机pc$num启动失败!!!!!\e[0m"
-   virsh destroy pc$num &> /dev/null
-   virsh undefine pc$num &> /dev/null
+   echo -e "\e[33;31m虚拟机node$num启动失败!!!!!\e[0m"
+   virsh destroy node$num &> /dev/null
+   virsh undefine node$num &> /dev/null
    exit
 fi
 echo -en "设置IP地址中......                       \t"
@@ -81,8 +81,8 @@ expect << EOF
 spawn ssh -X root@192.168.4.$num
 expect "#" { send "nmcli connection modify eth0 ipv4.method manual ipv4.addresses 192.168.4.$num/24 connection.autoconnect yes
 nmcli connection up eth0\r" }
-expect "#" { send "hostname pc${num}.tedu.cn\r" }
-expect "#" { send "echo pc${num}.tedu.cn > /etc/hostname\r" }
+expect "#" { send "hostname node${num}.tedu.cn\r" }
+expect "#" { send "echo node${num}.tedu.cn > /etc/hostname\r" }
 expect "#" {send "echo 1 | passwd --stdin root\r" }
 expect "#" {send "echo \"\[rhel7]
 name=rhel7
